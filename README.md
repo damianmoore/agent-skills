@@ -182,3 +182,16 @@ claude plugin tag ~/projects/agent-skills
 
 which validates that `plugin.json` and the marketplace entry agree before tagging. Bump the
 version in `plugin.json`, commit, then tag.
+
+## Validating changes
+
+Run **both** forms — they check different things:
+
+```bash
+claude plugin validate .                            # marketplace manifest only
+claude plugin validate .claude-plugin/plugin.json   # plugin manifest + skill frontmatter
+```
+
+The directory form does *not* parse skill frontmatter. A stray `: ` inside an unquoted
+YAML scalar (e.g. a `description:` containing `foo: bar`) silently drops **all** of that
+skill's frontmatter at runtime — the second form is what catches it.
