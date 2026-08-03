@@ -1,6 +1,6 @@
 ---
 name: issue-plan
-description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for Opus subagents — and file its ticket on the project's configured GitHub Projects board (per .agent/project.yml) via issue-create. Use when asked to plan a feature, fix, or migration, or to turn an investigation into a plan document.
+description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for Opus subagents — and file its ticket on the project's configured GitHub Projects board (per .agent/project.yml) via issue-create. Also supports an async plan-PR review flow for headless or phone review, shipping the plan as a PR whose open questions are task-list checkboxes. Use when asked to plan a feature, fix, or migration, to turn an investigation into a plan document, or to put a plan up for async review.
 ---
 
 # Write an implementation plan
@@ -33,6 +33,25 @@ the release steps explicitly, and a `**Verify:**` line says plainly that the rep
 no test or lint command rather than inventing one. Keys read without a default exit non-zero
 when missing — tell the user to add them to `.agent/project.yml` rather than guessing.
 
+## Review mode: interactive or plan PR
+
+The plan gets a human review gate either way. Decide **which mode at the start of the run**,
+before §2 — it changes how the open questions are put, and nothing else about the plan:
+
+- **Interactive** — a human is at the terminal. Questions go through `AskUserQuestion` (§2),
+  the ticket is filed at the end (§6), and its card lands in `Ready` as soon as the plan is
+  locked. This is the default whenever the session is interactive.
+- **Async plan PR** — nobody is watching the terminal. Questions become **§0 Open questions**
+  carrying proposed defaults (§2), the plan doc ships as a PR labelled `plan`, and the whole
+  gate happens in the GitHub mobile app (§7). The card sits in `Draft` until that PR is
+  approved and merged.
+
+**Async is the default whenever the session is headless** — a session pod, a `claude -p` run,
+any invocation with no interactive user — and whenever the user asks for review "async", "on
+my phone", "as a PR" or similar. `AskUserQuestion` has no answer path in those sessions:
+asking there either strands the run or quietly takes a default nobody chose. If you cannot
+tell whether a human is present, you are headless — take the async path.
+
 ---
 
 ## 1. Research before writing
@@ -61,9 +80,11 @@ What §3 has to establish before the design can be trusted:
 
 ## 2. Ask the open questions **before** writing
 
-Anything that would change the shape of the plan is asked now, not left as a `TODO` in the
-document. Use `AskUserQuestion`, batched (up to 4 per call), recommended option first and
-labelled `(Recommended)`.
+Anything that would change the shape of the plan is settled now, not left as a `TODO` in the
+document. In interactive mode that means asking: use `AskUserQuestion`, batched (up to 4 per
+call), recommended option first and labelled `(Recommended)`. In async plan-PR mode the same
+questions are written down instead — see the subsection at the end of this section; the rest
+of the section applies unchanged to both.
 
 Ask about things like: which behaviour is intended when the rule bites; whether existing
 over-limit or broken data gets migrated, grandfathered, or left; fail-open vs fail-closed;
@@ -81,16 +102,43 @@ founder ops step, a vendor response), it does not silently vanish — it goes in
 questions**, which the implementing agent is instructed to put to the user before writing any
 code. Leave §0 out entirely when there are none.
 
+### Async mode: write the questions down instead of asking them
+
+In async plan-PR mode there is nobody to answer an `AskUserQuestion`, so the same questions —
+found by the same judgement about what would change the shape of the plan — go into **§0 Open
+questions** instead. Each carries a **proposed default**: the option you would have marked
+`(Recommended)`, restated as the answer the plan assumes if nobody says otherwise. Phrase the
+question so that **ticking its box means "the default is fine"**, and use `template.md`'s
+"Decision needed" callout form so it stays skimmable on a phone:
+
+```markdown
+- [ ] **Decision needed:** Do existing over-limit workspaces get migrated, grandfathered, or
+      left alone? — **Default:** grandfathered; the cap binds new additions only (§4.5).
+```
+
+These lines are copied into the plan PR body as GitHub task-list items (§7.2), and each one
+the reviewer ticks or answers becomes a §2 Decisions row at approval (§7.3). Async mode is
+not licence to punt: a question the code or a conventional default can answer is still yours
+to decide and record straight in §2.
+
+**§0 therefore carries two kinds of entry, written identically:** questions deferred to
+implementation time (the paragraph above), and — in async mode only — the plan-review
+questions with their defaults. Do not split them into subsections or mark which is which.
+Both are boxes a human must tick before code is written, and `issue-implement`'s §0 gate
+treats whatever is still unticked when it runs the same way. In async mode the review
+answers simply arrive first and are ticked before the plan PR merges, so anything left
+unticked on `main` is by construction the implementation-time kind.
+
 ## 3. Write the document
 
 `docs/plans/<kebab-topic>-plan.md`. Section order is fixed — copy `template.md` and fill it in:
 
 | § | Section | Content |
 |---|---------|---------|
-| — | Title + `**Status:** … · **Ticket:** #NN · **Date:** …` | Status is `Ready to implement`, `Draft — not scheduled`, or `Draft for review`; the ticket link is added in step 6 |
+| — | Title + `**Status:** … · **Ticket:** #NN · **Date:** …` | Status is `Ready to implement`, `Draft — not scheduled`, or `Draft for review`; the ticket link is added in step 6. In async mode the plan is authored as `Draft for review` and flips to `Ready to implement` when its plan PR is approved (§7.3) |
 | — | Lede (2–3 paragraphs, no heading) | The problem in concrete terms, with the evidence: file references, real numbers, the customer-visible symptom. A reader must understand why this exists before reaching §1 |
 | — | Progress log | Empty at authoring time except its standing instruction line |
-| 0 | Open questions | Only if any survived §2 above. Otherwise omit |
+| 0 | Open questions | Only if any survived §2 above — the ones deferred to implementation time, plus (in async mode) every question that would have been asked interactively, each with its proposed default. Otherwise omit |
 | 1 | Goal & non-goals | Non-goals matter as much as the goal — they stop scope creep mid-implementation |
 | 2 | Decisions (locked) | Two-column table. Every judgement call, including the ones you made yourself |
 | 3 | Current state (verified `<date>`) | §1 research, subsectioned, every claim referenced |
@@ -154,9 +202,192 @@ restructure) — where `<kebab-topic>` is usually the plan filename minus `-plan
   plan is not yet locked), type label matching the branch prefix, plus the `plan` label.
   Add the resulting `**Ticket:** #NN` link to the plan's `**Status:**` line. The board —
   not any repo file — is the single source of truth for status.
+  **In async mode the column is always `Draft`** (the plan PR is what locks the plan), and
+  the ticket is filed **here, before §7 cuts the branch** — the plan PR body has to reference
+  `#NN`, and the plan doc that gets committed should already carry the ticket link.
 - **If the repo keeps a `docs/todo.md`, remove any lines this plan covers** in the same
   session as filing the ticket. Per the note at the top of that file, `todo.md` holds only
   unplanned work — once a ticket exists on the board (in any column, including Draft or
-  Parked), the ticket is the single tracker.
+  Parked), the ticket is the single tracker. In async mode those deletions ride along on the
+  plan branch and land when the plan PR merges.
 - Report back with the path, the ticket number, the milestone count, any §0 questions still
   open, and which `todo.md` lines were removed.
+
+**Interactive mode is done at this point.** In async mode the plan is not finished until its
+PR is open — continue to §7, and report the PR URL alongside everything above.
+
+---
+
+## 7. The plan-PR review gate (async mode only)
+
+The plan itself goes up as a pull request, so the review runs entirely in the GitHub mobile
+app: read the diff, tick the §0 boxes or answer them in a comment, approve. Nothing about the
+plan's *content* changes — only how it is reviewed and when the card moves.
+
+Read the two config values this needs the same way every other skill does:
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.repo       # <repo> — owner/name
+${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.assignee   # <assignee>
+```
+
+Both are required keys — on a non-zero exit, tell the user to add them to
+`.agent/project.yml` rather than guessing a repo or a login.
+
+### 7.1 Branch and push the plan
+
+The branch is `plan/<kebab-topic>` — the *same* `<kebab-topic>` the implementation branch will
+use later, with `plan/` in place of the type prefix, so the two are visibly the same work:
+`plan/feed-fetch-reliability` now, `fix/feed-fetch-reliability` at implementation time.
+
+```bash
+git fetch origin
+git switch -c plan/<kebab-topic> --no-track origin/main
+git push -u origin plan/<kebab-topic>
+```
+
+`--no-track` is load-bearing here for exactly the reason `issue-implement` §1 gives: on a
+machine with `push.default=upstream`, a branch cut tracking `origin/main` pushes **straight to
+remote `main`**. Read the push output and confirm it says `-> plan/<kebab-topic>`.
+
+Then commit the plan doc — plus any `docs/todo.md` deletions from §6 — with the `git-commit`
+skill and push. Never commit the plan to `main` directly in this mode; merging the plan PR is
+what puts it there.
+
+### 7.2 Open the plan PR
+
+The body is a *summary* plus the questions, not a copy of the plan — the diff is the plan.
+Write it to a scratchpad file rather than fighting shell quoting, as `issue-pr` does:
+
+```markdown
+## What this plans
+
+<Two to four sentences, lifted from the plan's lede: the problem in concrete terms and the
+shape of the fix. Lead with the user-visible symptom.>
+
+## How to review this
+
+- **Read** `docs/plans/<kebab-topic>-plan.md` — §1 goal and non-goals, §2 decisions, §5 milestones.
+- **Scrutinise** §2: those decisions are what the implementation will not re-litigate.
+- **Answer** the questions below — tick a box to accept its default, or reply in a comment
+  to choose something else.
+
+## Open questions
+
+- [ ] **Decision needed:** <question> — **Default:** <proposed answer, with one clause on
+      what a different answer would change>
+- [ ] **Decision needed:** <question> — **Default:** <proposed answer>
+
+Approving this PR locks the plan: every ticked default becomes a §2 decision, the plan merges
+to `main`, and the ticket moves to Ready.
+
+Part of #NN
+```
+
+The task-list items are the §0 entries **verbatim** — same wording, same defaults. That is
+what makes ticking a box on a phone an unambiguous answer.
+
+**End the body `Part of #NN`, never `Closes #NN`.** This is the one place the `issue-pr` rule
+inverts, and the reason is board automation: the board's built-in *Item closed* workflow fires
+on the issue closing, so a plan PR merged with a closing keyword would close the ticket and
+slam its card from `Draft` to `Merged` before a single line of the work existed. `Part of #NN`
+cross-references the ticket without closing it. `issue-pr`'s `Closes #NN` rule still holds for
+the **implementation** PR — that one is meant to close the ticket.
+
+Everything else follows `issue-pr`'s conventions: one-line title, ≤72 characters, concrete
+over salesmanlike, and no mention of Claude, AI or assistant tooling anywhere in the body —
+no `Co-Authored-By`, no "Generated with" trailer. The title is `Plan: <topic>`
+(`Plan: Feed fetch reliability`), reusing the ticket's topic wording. That is a noun phrase
+rather than `issue-pr`'s imperative, deliberately: this PR names a plan, it does not describe
+a change to the code.
+
+```bash
+gh pr create \
+  --base main \
+  --title "Plan: <topic>" \
+  --body-file <scratchpad>/plan-pr-body.md \
+  --label plan \
+  --assignee <assignee>
+
+gh pr edit --add-reviewer <assignee> 2>&1 || true
+```
+
+`plan` is the same repo label `issue-create` puts on plan-backed tickets (`bootstrap-board.sh`
+creates it); it is what tells a reviewer, and the notification stream, that this PR is a gate
+and not code. As in `issue-pr`, the `--add-reviewer` step fails with "review cannot be
+requested from pull request author" when the configured reviewer opened the PR — that is
+normal, `--assignee` already put it on their list, so note it in a clause and move on.
+
+Finally, leave the trail on the ticket (the card is already in `Draft` from §6 — no move):
+
+```bash
+gh issue comment <issue#> -R <repo> \
+  --body "Plan up for review on PR #<pr> (branch \`plan/<kebab-topic>\`). Card stays in Draft until it's approved and merged."
+```
+
+### 7.3 When the plan is approved
+
+Approval means a PR review in the `APPROVED` state. Check it — never infer it from a friendly
+comment, and never approve or merge on your own reading of the thread:
+
+```bash
+gh pr view <pr> --json reviewDecision,reviews,comments
+```
+
+Then, in this order:
+
+1. **Record every answer as a row in §2 Decisions (locked).** A ticked box is an accepted
+   default and becomes a decision exactly like a written answer — "Grandfathered; the cap
+   binds new additions only", not "we agreed to grandfather it". An answer given as a PR
+   comment counts identically to a tick, and where a comment and a box disagree, the comment
+   wins.
+2. **Tick the §0 boxes** you have just converted, and delete §0 entirely if that empties it.
+   Anything genuinely unanswerable until implementation stays in §0 for `issue-implement`'s
+   gate to pick up.
+3. **Flip the plan's status line** — the `**Status:**` header becomes `Ready to implement`.
+4. **Commit those edits with the `git-commit` skill and push.** They must land *inside* the
+   PR, so the plan that reaches `main` is the locked one.
+5. **Merge, only now that the approval exists:**
+
+   ```bash
+   gh pr merge <pr> --squash --delete-branch
+   ```
+
+6. **Move the card to `Ready`** via the `issue-update` skill, with the transition comment:
+
+   ```bash
+   ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh status <issue#> "Ready"
+   gh issue comment <issue#> -R <repo> \
+     --body "Plan approved and merged (PR #<pr>). Ready to implement on \`<prefix>/<kebab-topic>\`."
+   ```
+
+7. **Confirm the plan branch is gone.** `--delete-branch` removes it on the remote and, run
+   from a clone, locally too; check with `git branch --list 'plan/*'` and clean up if not.
+   Then `git switch main && git pull` so the implementation branch is later cut from an
+   up-to-date `main`.
+
+Implementation is unchanged from there: `issue-implement` picks the ticket up out of `Ready`
+and cuts `<prefix>/<kebab-topic>` off `main`. Its §0 gate still runs, so anything left
+unticked is put to the user before code is written.
+
+### 7.4 When the plan is rejected or superseded
+
+"Request changes" is a **revision**, not a rejection: address the feedback on the same branch,
+push, and the same approval path applies.
+
+A plan that is genuinely not going ahead does not merge — close the PR with the reason:
+
+```bash
+gh pr close <pr> --delete-branch \
+  --comment "<why — the decision that killed it, and the successor ticket if there is one>"
+```
+
+Then follow the `issue-update` skill for the ticket:
+
+- **Shelved for now** — card to `Parked`, comment saying why and what would unpark it, and
+  leave the issue **open**: closing it would bounce the card to Merged.
+- **Superseded** — comment naming the successor ticket, `gh issue close <n> --reason "not
+  planned"`, **then** set the column to `Released`, because the close fires the Merged
+  automation first.
+
+The plan doc dies with the branch — it never reached `main`, so there is nothing to archive.

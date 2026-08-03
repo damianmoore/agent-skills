@@ -22,11 +22,23 @@ silently implement something else.
 
 ## 0. Open questions (ask before implementing)
 
-<Omit this section entirely if none. These are the questions that could not be settled at
-authoring time. The implementing agent must put them to the user with `AskUserQuestion`
-BEFORE writing any code, and record each answer as a new row in §2.>
+<Omit this section entirely if none. Two kinds of entry live here, written identically and
+never split apart: questions that could not be settled at authoring time (they need a prod
+value, a founder ops step, a vendor response), and — in async plan-PR review mode — every
+question that would have been put interactively, each carrying the default the plan assumes.
+Any box still unticked when implementation starts must be put to the user with
+`AskUserQuestion` BEFORE any code is written, and each answer recorded as a new row in §2.>
 
-- [ ] <Question — why it matters, what each answer would change>
+<Write each one as a "Decision needed" callout — bold label, the question, then the proposed
+default — phrased so that ticking the box means "the default is fine". Keep it to the one
+wrapped line: in async mode these are copied verbatim into the plan PR body as GitHub
+task-list items and read on a phone screen.>
+
+- [ ] **Decision needed:** <the question, and what it changes> — **Default:** <the answer
+      the plan assumes if nobody says otherwise; one clause on what any other answer alters>
+
+      > <Optional, only when the trade-off needs it: a sentence of context or evidence.
+      > Anything longer belongs in §4 with a pointer from here.>
 
 ---
 

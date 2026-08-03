@@ -49,7 +49,9 @@ creates it (idempotent).
 | Event | Column | Also do |
 |-------|--------|---------|
 | Plan authoring starts / still draft | Draft | ticket created via `issue-create` |
-| Plan locked, ready to implement | Ready | plan's `**Status:**` line updated |
+| Plan PR opened for async review (`issue-plan` §7) | Draft | **no move** — the card is already there; comment: plan PR link and that its approval is the gate. That PR body ends `Part of #NN`, never `Closes #NN` |
+| Plan locked, ready to implement | Ready | plan's `**Status:**` line updated. In async mode this transition *is* the plan PR being approved: merge it first, then move the card, then delete the `plan/…` branch |
+| Plan rejected, not going ahead | Parked (or Released if superseded) | close the plan PR unmerged with the reason as its close comment, then follow the Parked / Superseded rows below |
 | Branch cut, implementation starts | In progress | comment: branch name, e.g. `Implementation started on \`fix/feed-fetch-reliability\`.` |
 | PR opened | In review | comment: PR link + what remains (e.g. rollout milestone); PR body gains `Closes #NN` (issue-pr does this) |
 | PR merged | Merged | **automatic** — merge closes the issue, board moves the card. Only comment: merge noted, rollout pending and whose it is |
@@ -63,6 +65,10 @@ Rules:
   what moves the card to Merged; without the closing keyword the card strands in In review.
   Merged still means "in `main`, rollout pending" — the issue being closed is a board
   mechanism, not a claim that the work shipped.
+- **The one exception is a plan PR** (`issue-plan` §7), which ends `Part of #NN`. For the same
+  reason: the *Item closed* workflow has no conditions, so a closing keyword there would send
+  the card from Draft to Merged and close the ticket before the work existed. One ticket has
+  at most two PRs — the plan PR references it, the implementation PR closes it.
 - **The Merged move is automatic; the comment is not.** After a merge, check whether the
   transition comment exists and add it if not.
 - **Closing any ticket on the board sends its card to Merged** — the built-in workflow has no
