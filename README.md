@@ -43,14 +43,14 @@ In Claude Code:
 
 ```
 /plugin marketplace add damianmoore/agent-skills
-/plugin install agent-skills@agent-skills
+/plugin install agent-skills@damianmoore
 ```
 
 Or from the CLI:
 
 ```bash
 claude plugin marketplace add damianmoore/agent-skills
-claude plugin install agent-skills@agent-skills --scope user
+claude plugin install agent-skills@damianmoore --scope user
 ```
 
 The repo is its own marketplace, so the marketplace name and the plugin name are both
