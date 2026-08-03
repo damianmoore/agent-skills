@@ -1,6 +1,6 @@
 ---
 name: issue-plan
-description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for Opus subagents — and file its ticket on the project's configured GitHub Projects board (per .agent/project.yml) via issue-create. Also supports an async plan-PR review flow for headless or phone review, shipping the plan as a PR whose open questions are task-list checkboxes. Use when asked to plan a feature, fix, or migration, to turn an investigation into a plan document, or to put a plan up for async review.
+description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for Opus subagents — and file its ticket on the project's configured GitHub Projects board (per .agent/project.yml) via issue-create. Also supports an async plan-PR review flow for headless or phone review, shipping the plan as a PR whose open questions are task-list checkboxes. Use when asked to plan a feature, fix, or migration, to turn an investigation into a plan document, or to put a plan up for async review — and equally for the back half of that flow, i.e. checking whether a plan PR has been approved, transcribing its answers, merging an approved plan PR, or moving a plan's card to Ready.
 ---
 
 # Write an implementation plan
@@ -39,8 +39,8 @@ The plan gets a human review gate either way. Decide **which mode at the start o
 before §2 — it changes how the open questions are put, and nothing else about the plan:
 
 - **Interactive** — a human is at the terminal. Questions go through `AskUserQuestion` (§2),
-  the ticket is filed at the end (§6), and its card lands in `Ready` as soon as the plan is
-  locked. This is the default whenever the session is interactive.
+  the ticket is filed at the end (§6), and its card lands in `Ready` once the plan is locked —
+  `Draft` if it is not. This is the default whenever the session is interactive.
 - **Async plan PR** — nobody is watching the terminal. Questions become **§0 Open questions**
   carrying proposed defaults (§2), the plan doc ships as a PR labelled `plan`, and the whole
   gate happens in the GitHub mobile app (§7). The card sits in `Draft` until that PR is
@@ -49,8 +49,17 @@ before §2 — it changes how the open questions are put, and nothing else about
 **Async is the default whenever the session is headless** — a session pod, a `claude -p` run,
 any invocation with no interactive user — and whenever the user asks for review "async", "on
 my phone", "as a PR" or similar. `AskUserQuestion` has no answer path in those sessions:
-asking there either strands the run or quietly takes a default nobody chose. If you cannot
-tell whether a human is present, you are headless — take the async path.
+asking there either strands the run or quietly takes a default nobody chose.
+
+**Probe for it rather than guessing:** if the `AskUserQuestion` tool is not available to you in
+this session, you are headless — take the async path. If it is available, you are interactive.
+An explicit request for async review overrides the probe either way; nothing overrides it
+towards interactive.
+
+Once §7.1 has run, **the mode is a property of the plan, not of the session**. A human who
+turns up mid-plan reviews it through the PR, and an interactive session later asked to "check
+the plan PR" or "finish it off" executes §7.3 as written — being interactive is not a reason to
+re-ask questions that are already sitting on a PR.
 
 ---
 
@@ -127,7 +136,9 @@ questions with their defaults. Do not split them into subsections or mark which 
 Both are boxes a human must tick before code is written, and `issue-implement`'s §0 gate
 treats whatever is still unticked when it runs the same way. In async mode the review
 answers simply arrive first and are ticked before the plan PR merges, so anything left
-unticked on `main` is by construction the implementation-time kind.
+unticked on `main` is by construction the implementation-time kind — §7.3 guarantees that by
+consuming *every* review-time question at approval, including the boxes the reviewer left
+untouched, which an approval accepts at their proposed defaults.
 
 ## 3. Write the document
 
@@ -198,8 +209,8 @@ restructure) — where `<kebab-topic>` is usually the plan filename minus `-plan
 
 - Do not implement anything while writing the plan. Authoring and implementing are separate
   sessions; the plan is the handoff.
-- **File the ticket via the `issue-create` skill**: board column `Ready` (or `Draft` if the
-  plan is not yet locked), type label matching the branch prefix, plus the `plan` label.
+- **File the ticket via the `issue-create` skill**: board column `Ready` once the plan is
+  locked, `Draft` if it is not; type label matching the branch prefix, plus the `plan` label.
   Add the resulting `**Ticket:** #NN` link to the plan's `**Status:**` line. The board —
   not any repo file — is the single source of truth for status.
   **In async mode the column is always `Draft`** (the plan PR is what locks the plan), and
@@ -218,11 +229,25 @@ PR is open — continue to §7, and report the PR URL alongside everything above
 
 ---
 
-## 7. The plan-PR review gate (async mode only)
+## 7. The plan-PR gate
 
 The plan itself goes up as a pull request, so the review runs entirely in the GitHub mobile
 app: read the diff, tick the §0 boxes or answer them in a comment, approve. Nothing about the
 plan's *content* changes — only how it is reviewed and when the card moves.
+
+Async mode is what opens this gate, but the gate is not owned by the session that opened it:
+once §7.1 has run, any session asked to check on, answer, or finish the plan PR works through
+§7.3 below, interactive or not.
+
+**The gate presupposes two identities.** The agent account (a dedicated bot user) opens the
+plan PR; the human named in `github.assignee` approves it. GitHub refuses an approving review
+from a PR's own author, so in a single-identity setup — the pipeline running under your own
+login on a laptop, where the author *is* the configured reviewer — a formal approval is
+impossible and waiting for one deadlocks the plan. **In that configuration only**, an explicit
+approving comment from the configured reviewer ("approved", "LGTM — merge it") is the gate;
+say in your report that you took a comment as the approval and why. This is a stopgap until the
+two-account setup exists, not a general relaxation — wherever author and reviewer are different
+accounts, an `APPROVED` review is the only thing that opens the gate.
 
 Read the two config values this needs the same way every other skill does:
 
@@ -250,9 +275,22 @@ git push -u origin plan/<kebab-topic>
 machine with `push.default=upstream`, a branch cut tracking `origin/main` pushes **straight to
 remote `main`**. Read the push output and confirm it says `-> plan/<kebab-topic>`.
 
+`git switch -c` carries uncommitted work across, so the plan doc and the `docs/todo.md`
+deletions from §6 come with you — they do not need committing first. The one hazard is a
+**shared** file: the branch is cut from freshly-fetched `origin/main`, and if `origin/main` has
+moved on since your checkout, git refuses the switch rather than clobber your edits to a file
+that also changed upstream. Cut the branch *before* editing anything shared like
+`docs/todo.md` when that is a possibility.
+
 Then commit the plan doc — plus any `docs/todo.md` deletions from §6 — with the `git-commit`
 skill and push. Never commit the plan to `main` directly in this mode; merging the plan PR is
 what puts it there.
+
+**No closing keywords in any commit message on this branch** — no `Closes #NN`, `Fixes #NN` or
+`Resolves #NN`. A squash merge concatenates the branch's commit messages into the merge body by
+default, so one such subject would close the ticket the moment the plan merged, for the same
+reason §7.2 bans it in the PR body. §7.3 pins the merge subject and body explicitly as a second
+line of defence.
 
 ### 7.2 Open the plan PR
 
@@ -302,14 +340,14 @@ rather than `issue-pr`'s imperative, deliberately: this PR names a plan, it does
 a change to the code.
 
 ```bash
-gh pr create \
+gh pr create -R <repo> \
   --base main \
   --title "Plan: <topic>" \
   --body-file <scratchpad>/plan-pr-body.md \
   --label plan \
   --assignee <assignee>
 
-gh pr edit --add-reviewer <assignee> 2>&1 || true
+gh pr edit <pr> -R <repo> --add-reviewer <assignee> 2>&1 || true
 ```
 
 `plan` is the same repo label `issue-create` puts on plan-backed tickets (`bootstrap-board.sh`
@@ -327,33 +365,89 @@ gh issue comment <issue#> -R <repo> \
 
 ### 7.3 When the plan is approved
 
-Approval means a PR review in the `APPROVED` state. Check it — never infer it from a friendly
-comment, and never approve or merge on your own reading of the thread:
+Approval means a PR review in the `APPROVED` state — or, in the single-identity configuration
+described at the top of §7, an explicit approving comment from the configured reviewer.
+Otherwise never infer approval from a friendly comment, and never approve or merge on your own
+reading of the thread.
+
+**Get back on the plan branch before touching anything.** Approval usually arrives in a new
+session, sitting on `main`, and every edit below has to land inside the PR — editing here
+without switching pushes the plan's own locking commit to `main`, which is exactly what §7.1
+forbids:
 
 ```bash
-gh pr view <pr> --json reviewDecision,reviews,comments
+git fetch origin
+git switch plan/<kebab-topic> || git switch -c plan/<kebab-topic> --track origin/plan/<kebab-topic>
+git pull
 ```
+
+The first `git switch` covers the branch already existing locally; the fallback creates it from
+the remote in a session that has never seen it.
+
+**Then collect the answers — from all three surfaces.** They can arrive as ticked checkboxes in
+the **PR body**, as **conversation comments**, or as **inline review comments** on the plan
+diff (the natural thing to do when reading a diff on a phone). `--json comments` returns
+conversation comments *only*, so the inline review threads need the API call as well:
+
+```bash
+gh pr view <pr> -R <repo> --json reviewDecision,reviews,body,comments
+gh api "repos/<repo>/pulls/<pr>/comments"     # inline review-thread comments
+```
+
+Read all three before transcribing anything. Where a comment and a checkbox disagree, **the
+comment wins** — a ticked box under a comment saying "actually, do B" is answered B.
+
+`reviewDecision` is authoritative whenever it is non-empty: `APPROVED` means approved. It comes
+back null or empty on repos with no branch protection and no requested reviewer — there, fall
+back to the latest review in `reviews` having state `APPROVED`.
+
+**An approval with the boxes untouched and no contrary comment accepts every proposed
+default.** That is what writing defaults into the questions is *for*: the reviewer read them
+and pressed Approve. Record each default as a §2 Decisions row, tick its box yourself, and note
+"accepted by approval" in the row.
+
+The converse does **not** hold. Boxes ticked or answers commented with no approval is not a
+gate: do not merge. Leave one comment summarising what you have taken as answered and asking
+for the approval click, then stop and report the wait state. Nudge once — not on a loop.
 
 Then, in this order:
 
-1. **Record every answer as a row in §2 Decisions (locked).** A ticked box is an accepted
-   default and becomes a decision exactly like a written answer — "Grandfathered; the cap
-   binds new additions only", not "we agreed to grandfather it". An answer given as a PR
-   comment counts identically to a tick, and where a comment and a box disagree, the comment
-   wins.
+1. **Record every answer as a row in §2 Decisions (locked)** — one row per question, none left
+   over. A ticked box is an accepted default and becomes a decision exactly like a written
+   answer: "Grandfathered; the cap binds new additions only", not "we agreed to grandfather
+   it". A commented answer counts identically to a tick, and an untouched box under an
+   approval is the default accepted — with "accepted by approval" noted in the row.
 2. **Tick the §0 boxes** you have just converted, and delete §0 entirely if that empties it.
    Anything genuinely unanswerable until implementation stays in §0 for `issue-implement`'s
    gate to pick up.
 3. **Flip the plan's status line** — the `**Status:**` header becomes `Ready to implement`.
 4. **Commit those edits with the `git-commit` skill and push.** They must land *inside* the
    PR, so the plan that reaches `main` is the locked one.
-5. **Merge, only now that the approval exists:**
+5. **Re-check the approval, now that you have pushed.** Under branch protection with "dismiss
+   stale approvals when new commits are pushed", the transcription commit you just pushed
+   dismisses the very approval you are acting on, and the merge is refused:
 
    ```bash
-   gh pr merge <pr> --squash --delete-branch
+   gh pr view <pr> -R <repo> --json reviewDecision,reviews
    ```
 
-6. **Move the card to `Ready`** via the `issue-update` skill, with the transition comment:
+   If it no longer reads `APPROVED`, **do not merge**. Comment on the PR saying the only change
+   since the approval is the transcription commit, what it contains (the §2 rows, the ticked
+   boxes, the status flip — no change to the design), and asking for a re-approval. Then stop
+   and report the wait state.
+6. **Merge, only now that the approval still stands:**
+
+   ```bash
+   gh pr merge <pr> -R <repo> --squash --delete-branch \
+     --subject "Plan: <topic> (#<pr>)" \
+     --body "Part of #NN"
+   ```
+
+   Pin the subject and body explicitly. Left to itself, a squash merge concatenates the
+   branch's commit messages into the merge body, so a single commit reading "Fixes #NN" would
+   close the ticket and fire the board's *Item closed* automation — precisely what §7.2's
+   `Part of #NN` exists to prevent.
+7. **Move the card to `Ready`** via the `issue-update` skill, with the transition comment:
 
    ```bash
    ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh status <issue#> "Ready"
@@ -361,7 +455,7 @@ Then, in this order:
      --body "Plan approved and merged (PR #<pr>). Ready to implement on \`<prefix>/<kebab-topic>\`."
    ```
 
-7. **Confirm the plan branch is gone.** `--delete-branch` removes it on the remote and, run
+8. **Confirm the plan branch is gone.** `--delete-branch` removes it on the remote and, run
    from a clone, locally too; check with `git branch --list 'plan/*'` and clean up if not.
    Then `git switch main && git pull` so the implementation branch is later cut from an
    up-to-date `main`.
@@ -378,7 +472,7 @@ push, and the same approval path applies.
 A plan that is genuinely not going ahead does not merge — close the PR with the reason:
 
 ```bash
-gh pr close <pr> --delete-branch \
+gh pr close <pr> -R <repo> --delete-branch \
   --comment "<why — the decision that killed it, and the successor ticket if there is one>"
 ```
 

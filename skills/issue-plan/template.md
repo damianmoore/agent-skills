@@ -37,8 +37,8 @@ task-list items and read on a phone screen.>
 - [ ] **Decision needed:** <the question, and what it changes> — **Default:** <the answer
       the plan assumes if nobody says otherwise; one clause on what any other answer alters>
 
-      > <Optional, only when the trade-off needs it: a sentence of context or evidence.
-      > Anything longer belongs in §4 with a pointer from here.>
+  > <Optional, only when the trade-off needs it: a sentence of context or evidence.
+  > Anything longer belongs in §4 with a pointer from here.>
 
 ---
 

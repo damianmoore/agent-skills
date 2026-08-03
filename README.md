@@ -153,10 +153,12 @@ error. It parses a deliberately tiny YAML subset (two levels, scalar values, `#`
    | `fix` | Bug fix — branch prefix `fix/…` |
    | `chore` | Tooling, docs, ops — branch prefix `chore/…` |
    | `refactor` | Behaviour-preserving restructure — branch prefix `refactor/…` |
-   | `plan` | Has a plan doc under `docs/plans/` |
+   | `plan` | Has a plan doc under `docs/plans/` — also the prefix of the short-lived plan-review branch `plan/…` (`issue-plan` §7); not a type |
 
    Every ticket carries exactly one of the four type labels, matching its branch prefix;
-   `plan` is added alongside it when the work has a plan document.
+   `plan` is added alongside it when the work has a plan document. `plan/` is the one branch
+   prefix that is not a type: it names the branch a plan doc is reviewed on, and the same work
+   is implemented later on its `feat/` / `fix/` / `chore/` / `refactor/` branch.
 
 That is the whole setup. From then on `issue-plan` / `issue-create` / `issue-implement` /
 `issue-pr` / `issue-update` work against that repo's board.

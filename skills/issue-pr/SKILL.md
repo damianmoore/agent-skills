@@ -1,6 +1,6 @@
 ---
 name: issue-pr
-description: Open a GitHub PR for the current branch with a reviewer-focused summary, assigned to the project's configured reviewer, and move the work's ticket to In review on the project's configured GitHub Projects board (per .agent/project.yml). Use when asked to create/open/raise a PR, make a pull request, or push a branch for review.
+description: Open a GitHub PR for the current branch with a reviewer-focused summary, assigned to the project's configured reviewer, and move the work's ticket to In review on the project's configured GitHub Projects board (per .agent/project.yml). Use when asked to create/open/raise a PR, make a pull request, or push a branch for review. This is the implementation PR; a plan-review PR on a plan/ branch belongs to issue-plan §7 instead.
 ---
 
 # Create a pull request
@@ -33,6 +33,14 @@ git log --oneline main..HEAD                     # commits in this branch
 git diff main...HEAD --stat                      # files + churn
 gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --state open --json number,url
 ```
+
+**Check the branch first: plan PRs are not this skill's job.** If the current branch is
+`plan/*`, or what you are being asked to open is the review gate for a plan document rather
+than for code, stop here and follow **`issue-plan` §7** instead — those PRs are titled
+`Plan: <topic>`, end their body `Part of #NN` (a closing keyword would close the ticket, and
+the board's *Item closed* automation would slam the card from Draft straight to Merged before
+any of the work existed), and leave the card in `Draft`, so §5's In review move does not apply
+either. Everything below is for the **implementation** PR.
 
 Then read the **actual diff** — `git diff main...HEAD` — before summarising. Never write a
 PR body from commit messages alone; commit subjects say what was done, the diff says what
@@ -112,7 +120,8 @@ Rules for the body:
   carries the number; the `issue-update` skill explains how to find it otherwise). The
   closing keyword is load-bearing: merging into `main` closes the issue, and the project
   board's built-in **Item closed** workflow moves the card to **Merged**. A neutral
-  `Tracking issue: #NN` would leave the card stranded in In review.
+  `Tracking issue: #NN` would leave the card stranded in In review. This rule is for
+  implementation PRs; a plan PR ends `Part of #NN` instead — see §1.
 - Closing the ticket at merge does **not** mean the work is done — **Merged** still means
   "in `main`, rollout pending". Released is a separate, manual move on the already-closed
   issue.
@@ -153,7 +162,8 @@ and use `--add-reviewer <login>` for them instead.
 ## 5. Update the ticket
 
 Per the `issue-update` skill: move the card to **In review** and leave a comment with the
-PR link and what remains (e.g. the rollout milestone and whose it is):
+PR link and what remains (e.g. the rollout milestone and whose it is). Implementation PRs
+only — a plan PR leaves the card in `Draft` (§1):
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh status <issue#> "In review"

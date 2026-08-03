@@ -1,7 +1,7 @@
 {
   "name": "agent-skills",
   "displayName": "Agent Skills — GitHub issue pipeline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Plan, ticket, implement, review and track work on a GitHub Projects v2 board: five skills (issue-plan, issue-create, issue-implement, issue-pr, issue-update) driven by a per-repo .agent/project.yml.",
   "author": {
     "name": "Damian Moore"

@@ -36,6 +36,12 @@ so they take no config arguments.
   behaviour-preserving restructure.
 - **Branch name** — `<prefix>/<kebab-topic>`, where `<kebab-topic>` is the plan filename
   minus `-plan` (e.g. `docs/plans/rest-api-plan.md` → `feat/rest-api`).
+- **`plan/` is a fifth branch prefix, and a special case**: `plan/<kebab-topic>` is the
+  short-lived branch carrying a plan document up for async review (`issue-plan` §7). It is
+  **not** a type — the ticket still takes exactly one of the four type labels and the matching
+  implementation branch, so `plan/feed-fetch-reliability` and `fix/feed-fetch-reliability` are
+  the same work at two stages. It pairs with the repo's `plan` label, which means "has a plan
+  doc", never a work type.
 - **Board columns** (in flow order):
 
   | Column | Meaning |

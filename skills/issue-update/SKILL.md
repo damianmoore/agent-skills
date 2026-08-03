@@ -53,7 +53,7 @@ creates it (idempotent).
 | Plan locked, ready to implement | Ready | plan's `**Status:**` line updated. In async mode this transition *is* the plan PR being approved: merge it first, then move the card, then delete the `plan/…` branch |
 | Plan rejected, not going ahead | Parked (or Released if superseded) | close the plan PR unmerged with the reason as its close comment, then follow the Parked / Superseded rows below |
 | Branch cut, implementation starts | In progress | comment: branch name, e.g. `Implementation started on \`fix/feed-fetch-reliability\`.` |
-| PR opened | In review | comment: PR link + what remains (e.g. rollout milestone); PR body gains `Closes #NN` (issue-pr does this) |
+| Implementation PR opened | In review | comment: PR link + what remains (e.g. rollout milestone); PR body gains `Closes #NN` (issue-pr does this). A plan PR never matches this row — it has its own row above, and leaves the card in Draft |
 | PR merged | Merged | **automatic** — merge closes the issue, board moves the card. Only comment: merge noted, rollout pending and whose it is |
 | Deployed to prod / work complete | Released | comment: version shipped + outcome; archive the plan doc (see issue-implement §3). Issue is already closed — don't reopen it |
 | Deliberately shelved | Parked | comment: why, and what would unpark it. Leave the issue **open** — closing it would bounce the card to Merged |
