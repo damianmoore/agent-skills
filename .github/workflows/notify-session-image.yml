@@ -1,0 +1,59 @@
+name: Notify session-image
+
+# The agent platform bakes this plugin into its session pod image at build time
+# (design decision D11). There is deliberately no in-pod update path, so a
+# release here only reaches agents once that image is rebuilt — this workflow
+# is the thing that asks for the rebuild.
+#
+# Required secret: REPO_DISPATCH_TOKEN
+#   A PAT (classic `repo`, or fine-grained with **Contents: read & write** on
+#   damianmoore/code-server) — the `repository_dispatch` API requires write
+#   access to the *target* repo, and the default GITHUB_TOKEN is scoped to this
+#   repo only, so it cannot be used. Add it at:
+#   Settings → Secrets and variables → Actions → New repository secret.
+#
+# The receiving side is .github/workflows/session-image.yml in
+# damianmoore/code-server, listening for `repository_dispatch` type
+# `plugin-updated`.
+
+on:
+  push:
+    branches: [main]
+    # Only the things that actually end up in the image. A README tweak or a
+    # change to this repo's own CI does not justify a ~3.8 GB rebuild and the
+    # rollout that follows it.
+    paths:
+      - 'skills/**'
+      - '.claude-plugin/**'
+      - '.github/workflows/notify-session-image.yml'
+  workflow_dispatch:
+
+# Nothing here reads the repo — the dispatch itself travels on
+# REPO_DISPATCH_TOKEN, which is a separate PAT. Drop the default token to the
+# minimum so a compromised action cannot write here.
+permissions:
+  contents: read
+
+# Several merges in a row should produce one rebuild of the latest state, not a
+# queue of rebuilds of superseded ones.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ask code-server to rebuild the session image
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
+          repository: damianmoore/code-server
+          event-type: plugin-updated
+          client-payload: |
+            {
+              "plugin": "agent-skills",
+              "sha": "${{ github.sha }}",
+              "ref": "${{ github.ref }}"
+            }
