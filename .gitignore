@@ -1,0 +1,8 @@
+# Editor / OS noise
+.DS_Store
+*.sw?
+*~
+
+# Local Claude Code state
+.claude/settings.local.json
+.playwright-mcp/

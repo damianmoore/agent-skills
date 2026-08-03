@@ -1,0 +1,19 @@
+# Configuration for the agent-skills pipeline (https://github.com/damianmoore/agent-skills)
+#
+# Copy to `.agent/project.yml` in the root of a repo that uses the issue-* skills and commit
+# it. Two levels only: a section, then `key: value` scalars. Values may be bare, "double
+# quoted", or 'single quoted'; `#` starts a comment.
+
+github:
+  owner: damianmoore                # required — Projects v2 board owner (user or org login)
+  repo: damianmoore/audio-audit     # required — owner/name of the repo the issues live in
+  project_title: "Audio Audit"      # required — Projects v2 board title (created by bootstrap-board.sh)
+  assignee: damianmoore             # required — login PRs are assigned to for human review
+
+conventions:
+  test_command: make test           # optional — run per milestone by issue-implement
+  lint_command: "ruff check --fix . && ruff format ."   # optional — run per milestone before the tests
+  test_notes: "known pre-existing failure: test_speech_recognition"  # optional — free text, quoted alongside test results
+
+deploy:
+  skill: deploy-production          # optional — project-specific release skill in .claude/skills/
