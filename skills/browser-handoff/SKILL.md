@@ -72,13 +72,25 @@ envctl browser url --control
 
 ### 3. Wait for the hand-back
 
-The person finishes and presses **Hand back**, which delivers a steer message to you:
+The person finishes and presses **Hand back**. That delivers the sentence
+`browser handoff complete` to you — how depends on the kind of session you are:
 
-```
-browser handoff complete
-```
+- **In a conversation** (a discussion session): it simply arrives as a message.
+- **Otherwise** (the usual case — a one-shot headless run has no input channel): it is
+  written to a **mailbox file** in the pod. Poll it:
 
-Wait for that message. Do not poll the page and guess — a page can look logged in
+  ```bash
+  # patient, cheap, and bounded — a person on a phone is minutes, not seconds
+  for _ in $(seq 1 120); do [ -f ~/.session/browser-handoff.json ] && break; sleep 15; done
+  cat ~/.session/browser-handoff.json     # {"message":"browser handoff complete — …","event":"…","at":"…"}
+  rm -f ~/.session/browser-handoff.json   # consume it: a stale file must not answer a LATER wait
+  ```
+
+  The `note` field carries anything the person added ("logged in as demo, 2FA done") —
+  read it, it often says which account you are now using. Delete the file once you have
+  read it.
+
+Wait for that signal. Do not poll the page and guess — a page can look logged in
 mid-redirect, and taking the browser back while someone is still typing breaks their flow.
 
 **If nobody comes** (give it a genuinely generous wait — this is a human on a phone, not a
