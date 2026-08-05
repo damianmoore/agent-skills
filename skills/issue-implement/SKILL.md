@@ -118,6 +118,90 @@ For each milestone:
 reason go into the Progress log entry, naming what was built instead and why. Never silently
 implement something else.
 
+## When you are blocked
+
+Unnumbered because it is not a step: a block can arrive at any point in the run, and this is
+what to do when it does.
+
+**Blocked means a human has to answer before the work can be right** — a decision the plan
+does not make, a credential you must not invent, an account or environment that is not yours
+to change. It is not a milestone failure, and it is not a licence to guess: a guess is how a
+milestone gets built against the wrong assumption and has to be redone.
+
+### 1. Say it on the ticket — always
+
+Comment on the ticket with a first line that starts `blocked:`. That prefix is the house
+convention and it is what makes the block findable later:
+
+```bash
+gh issue comment <issue#> -R <repo> --body "blocked: <the question, in one line>
+
+<what you tried, what each possible answer would mean you do next, and what is
+already committed and pushed>"
+```
+
+One question per comment. If two things are blocking you, say both — but lead with the one
+that unblocks the most work.
+
+### 2. Raise it on the platform, if you are running on one
+
+If you are running as a **platform session** (an agent pod dispatched by the agent platform's
+control plane), also tell the control plane. This is the step that pages a human: it lights
+the `blocked` dot on the ticket's board card and puts a "Needs You" item on the operator's
+phone. A ticket comment on its own notifies nobody — it is the record, not the signal.
+
+The three variables below are injected into every session pod. If any of them is unset you
+are **not** on the platform (you are on somebody's laptop or in CI) and this step simply does
+not apply — the ticket comment above is then the whole convention.
+
+```bash
+if [ -n "$CONTROL_PLANE_URL" ] && [ -n "$SESSION_SLUG" ] && [ -n "$SESSION_TRANSCRIPT_TOKEN" ]; then
+  curl -sS -X POST "$CONTROL_PLANE_URL/api/sessions/$SESSION_SLUG/blocked" \
+    -H "authorization: Bearer $SESSION_TRANSCRIPT_TOKEN" \
+    -H 'content-type: application/json' \
+    --data '{"question":"Which staging database should the migration target?"}'
+fi
+```
+
+- **`question` is one plain line** — the same sentence as the `blocked:` comment's first
+  line, so the phone, the board and the ticket all say the same thing. It is the first
+  thing shown on a lock screen. The endpoint caps it at 2000 characters and rejects an
+  empty one.
+- **Write the JSON body yourself, correctly escaped.** It is a JSON string: an apostrophe is
+  fine, a double quote or a backslash must be escaped, and a newline is not allowed. Do not
+  build it by pasting shell variables into the literal.
+- **Never echo, log or paste `$SESSION_TRANSCRIPT_TOKEN`.** Reference it by name, as above.
+  It is your session's own credential and it authorises writes about your session.
+- A non-2xx response is worth mentioning in your update, but it is not a reason to stop and
+  not a reason to retry in a loop: the ticket comment is the durable record either way.
+
+### 3. Park cleanly
+
+- Commit and **push** everything you have — a pod that disappears takes unpushed work with it,
+  and a block can outlast the session.
+- Carry on with anything in the plan that does **not** depend on the answer. Say in the ticket
+  comment which milestones those are.
+- If the block will clearly outlast this session, move the card to **Parked** via the
+  `issue-update` skill, with a comment saying what would unpark it.
+
+### 4. Clear it the moment it is answered
+
+```bash
+if [ -n "$CONTROL_PLANE_URL" ] && [ -n "$SESSION_SLUG" ] && [ -n "$SESSION_TRANSCRIPT_TOKEN" ]; then
+  curl -sS -X POST "$CONTROL_PLANE_URL/api/sessions/$SESSION_SLUG/unblock" \
+    -H "authorization: Bearer $SESSION_TRANSCRIPT_TOKEN"
+fi
+```
+
+Reply on the ticket with the answer you got and what you are doing with it, then clear the
+platform signal. Leaving it lit is worse than never raising it: the dot and the inbox item
+stay on screen, and the next genuine block is invisible in the noise.
+
+**A login wall is not one of these.** A password, 2FA, SSO or OAuth screen is a handoff to a
+human, never a credential to invent and never a question to park on: where the platform gives
+you a way to hand your browser over, take it. The `blocked:` convention above is the fallback
+for when nobody comes.
+
 ## 3. Review and rollout
 
 - **When the code milestones are complete** (or the work reaches the deployment milestone):
