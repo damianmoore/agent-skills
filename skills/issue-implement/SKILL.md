@@ -118,6 +118,11 @@ For each milestone:
 reason go into the Progress log entry, naming what was built instead and why. Never silently
 implement something else.
 
+**If verification hits a login wall in the browser, use the `browser-handoff` skill** — a
+password, 2FA, SSO or OAuth screen is a handoff to a human, never a credential to invent and
+never a milestone failure. That skill also covers persisting the login afterwards so the
+wall does not come back on the next milestone or the next session.
+
 ## 3. Review and rollout
 
 - **When the code milestones are complete** (or the work reaches the deployment milestone):

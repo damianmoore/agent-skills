@@ -6,7 +6,7 @@ of truth for status.** No status tables in the repo, no stale `README` checklist
 documents under `docs/plans/` carry the design and milestone detail, the ticket carries the
 state.
 
-Five skills cover the lifecycle:
+Six skills cover the lifecycle:
 
 | Skill | What it does |
 |-------|--------------|
@@ -15,6 +15,7 @@ Five skills cover the lifecycle:
 | `issue-implement` | Runs a plan end to end: §0 questions, branch off `main`, per-milestone implement + separate adversarial verify subagent, configured lint/test commands, commit and push per milestone, PR at completion. |
 | `issue-pr` | Opens a reviewer-focused PR, assigns it to the configured reviewer, and moves the card to In review. |
 | `issue-update` | Moves cards and keeps the issue current. Every other skill routes its status changes through this one. Ships `board.sh`, `bootstrap-board.sh`, and `project-config.sh`. |
+| `browser-handoff` | Hands the shared browser to a human when a page needs a login, 2FA or SSO the agent must not invent — page them, wait for the hand-back, then persist the login so the next session skips the wall. Referenced by `issue-implement` during verification. |
 
 ## The board
 
@@ -96,7 +97,7 @@ deploy:
 | Key | Required | Used by | Meaning |
 |-----|----------|---------|---------|
 | `github.owner` | yes | `board.sh`, `bootstrap-board.sh` | Login owning the Projects v2 board (user or org) |
-| `github.repo` | yes | all five skills | `owner/name` of the repo the issues live in |
+| `github.repo` | yes | all five `issue-*` skills | `owner/name` of the repo the issues live in |
 | `github.project_title` | yes | `board.sh`, `bootstrap-board.sh` | Board title; `bootstrap-board.sh` creates it if absent |
 | `github.assignee` | yes | `issue-pr` | Login that PRs are assigned to for human review |
 | `conventions.test_command` | no | `issue-implement` | Run after each milestone; omitted means "this repo has none" |
