@@ -156,10 +156,12 @@ not apply — the ticket comment above is then the whole convention.
 
 ```bash
 if [ -n "$CONTROL_PLANE_URL" ] && [ -n "$SESSION_SLUG" ] && [ -n "$SESSION_TRANSCRIPT_TOKEN" ]; then
-  curl -sS -X POST "$CONTROL_PLANE_URL/api/sessions/$SESSION_SLUG/blocked" \
+  curl -sS --max-time 10 -w '\n%{http_code}\n' \
+    -X POST "$CONTROL_PLANE_URL/api/sessions/$SESSION_SLUG/blocked" \
     -H "authorization: Bearer $SESSION_TRANSCRIPT_TOKEN" \
-    -H 'content-type: application/json' \
-    --data '{"question":"Which staging database should the migration target?"}'
+    -H 'content-type: application/json' --data @- <<'JSON'
+{"question":"Which of the client's staging databases should the migration target?"}
+JSON
 fi
 ```
 
@@ -167,13 +169,22 @@ fi
   line, so the phone, the board and the ticket all say the same thing. It is the first
   thing shown on a lock screen. The endpoint caps it at 2000 characters and rejects an
   empty one.
-- **Write the JSON body yourself, correctly escaped.** It is a JSON string: an apostrophe is
-  fine, a double quote or a backslash must be escaped, and a newline is not allowed. Do not
-  build it by pasting shell variables into the literal.
+- **Write the JSON body yourself, correctly escaped.** It is a JSON string, so a `"` or a
+  `\` must be escaped, and a literal newline is not allowed inside one — write `\n`. The
+  heredoc delimiter is quoted (`<<'JSON'`), so the shell interprets nothing between the
+  markers and an apostrophe needs no handling at all. Keep it that way: `--data '{...}'`
+  looks tidier right up until a question like the one above, where the apostrophe in
+  `client's` **closes the shell string**, the command dies of a syntax error, and nothing is
+  ever posted — while the `blocked:` comment still lands, so the block looks raised and
+  pages nobody. Do not build the body by pasting shell variables into the literal either.
 - **Never echo, log or paste `$SESSION_TRANSCRIPT_TOKEN`.** Reference it by name, as above.
   It is your session's own credential and it authorises writes about your session.
-- A non-2xx response is worth mentioning in your update, but it is not a reason to stop and
-  not a reason to retry in a loop: the ticket comment is the durable record either way.
+- **Read the status line.** `-sS` prints nothing on success, so `-w '\n%{http_code}\n'` is
+  what makes the outcome visible: the status lands on its own last line, and `000` means the
+  request never completed. `--max-time` bounds that case — an unreachable control plane
+  otherwise stalls you for curl's default two-minute connect timeout. A non-2xx or a timeout
+  is worth mentioning in your update, but neither is a reason to stop and neither is a reason
+  to retry in a loop: the ticket comment is the durable record either way.
 
 ### 3. Park cleanly
 
@@ -188,7 +199,8 @@ fi
 
 ```bash
 if [ -n "$CONTROL_PLANE_URL" ] && [ -n "$SESSION_SLUG" ] && [ -n "$SESSION_TRANSCRIPT_TOKEN" ]; then
-  curl -sS -X POST "$CONTROL_PLANE_URL/api/sessions/$SESSION_SLUG/unblock" \
+  curl -sS --max-time 10 -w '\n%{http_code}\n' \
+    -X POST "$CONTROL_PLANE_URL/api/sessions/$SESSION_SLUG/unblock" \
     -H "authorization: Bearer $SESSION_TRANSCRIPT_TOKEN"
 fi
 ```
