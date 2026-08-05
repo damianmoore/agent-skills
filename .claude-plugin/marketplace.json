@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "agent-skills",
-      "description": "Plan, ticket, implement, review and track work on a GitHub Projects v2 board: five skills (issue-plan, issue-create, issue-implement, issue-pr, issue-update) driven by a per-repo .agent/project.yml.",
+      "description": "Plan, ticket, implement, review and track work on a GitHub Projects v2 board: five skills (issue-plan, issue-create, issue-implement, issue-pr, issue-update) driven by a per-repo .agent/project.yml, plus browser-handoff for logins only a human can complete.",
       "source": {
         "source": "github",
         "repo": "damianmoore/agent-skills"

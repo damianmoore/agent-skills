@@ -23,6 +23,12 @@ The fifth runs throughout rather than at one point in that sequence:
 |-------|--------------|
 | `issue-update` | Moves cards and keeps the ticket current. Every other skill routes its status changes through this one. |
 
+One more is used during verification rather than as a lifecycle step:
+
+| Skill | What it does |
+|-------|--------------|
+| `browser-handoff` | Hands the browser to a human when a page needs a login, 2FA or SSO the agent must not invent — page them, wait for the hand-back, then persist the login so the next session skips the wall. On the agent platform it uses `envctl` and the mission-control viewer; anywhere else it falls back to asking in chat. Referenced by `issue-implement`. |
+
 ## The board
 
 The board's columns are the work lifecycle. Skills move cards by **lifecycle key**; each key

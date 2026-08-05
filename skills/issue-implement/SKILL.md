@@ -291,8 +291,10 @@ stay on screen, and the next genuine block is invisible in the noise.
 
 **A login wall is not one of these.** A password, 2FA, SSO or OAuth screen is a handoff to a
 human, never a credential to invent and never a question to park on: where the platform gives
-you a way to hand your browser over, take it. The `blocked:` convention above is the fallback
-for when nobody comes.
+you a way to hand your browser over, take it — the `browser-handoff` skill is that protocol,
+including persisting the login afterwards so the wall does not come back on the next
+milestone or the next session. The `blocked:` convention above is the fallback for when
+nobody comes.
 
 ## 3. Review and rollout
 
