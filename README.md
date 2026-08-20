@@ -6,14 +6,19 @@ of truth for status.** No status tables in the repo, no stale `README` checklist
 documents under `docs/plans/` carry the design and milestone detail, the ticket carries the
 state.
 
-Five skills cover the lifecycle:
+Five skills cover the lifecycle. Four of them run in sequence:
 
 | Skill | What it does |
 |-------|--------------|
-| `issue-plan` | Writes `docs/plans/<topic>.md` in a fixed house format — a verified current-state section, locked decisions, and checkbox milestones sized for one subagent each — attached to the work's ticket, reusing an existing one where there is one and filing a new one via `issue-create` where there isn't. Its review gate runs interactively at a terminal or as an async **plan PR** (below). |
 | `issue-create` | Creates the GitHub issue with the house title/label/branch conventions and puts its card on the board. |
+| `issue-plan` | Writes `docs/plans/<topic>.md` in a fixed house format — a verified current-state section, locked decisions, and checkbox milestones sized for one subagent each — attached to the work's ticket, reusing an existing one where there is one and filing a new one via `issue-create` where there isn't. Its review gate runs interactively at a terminal or as an async **plan PR** (below). |
 | `issue-implement` | Runs a plan end to end: §0 questions, branch off `main`, per-milestone implement + separate adversarial verify subagent, configured lint/test commands, commit and push per milestone, PR at completion. |
 | `issue-pr` | Opens a reviewer-focused PR, assigns it to the configured reviewer, and moves the card to In review. |
+
+The fifth runs throughout rather than at one point in that sequence:
+
+| Skill | What it does |
+|-------|--------------|
 | `issue-update` | Moves cards and keeps the issue current. Every other skill routes its status changes through this one. Ships `board.sh`, `bootstrap-board.sh`, and `project-config.sh`. |
 
 ## The board
@@ -161,7 +166,7 @@ error. It parses a deliberately tiny YAML subset (two levels, scalar values, `#`
    prefix that is not a type: it names the branch a plan doc is reviewed on, and the same work
    is implemented later on its `feat/` / `fix/` / `chore/` / `refactor/` branch.
 
-That is the whole setup. From then on `issue-plan` / `issue-create` / `issue-implement` /
+That is the whole setup. From then on `issue-create` / `issue-plan` / `issue-implement` /
 `issue-pr` / `issue-update` work against that repo's board.
 
 ## Project-specific skills stay in the repo
