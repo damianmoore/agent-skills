@@ -35,7 +35,7 @@ so they take no config arguments.
   `feat` new capability, `fix` bug fix, `chore` tooling/docs/ops, `refactor`
   behaviour-preserving restructure.
 - **Branch name** — `<prefix>/<kebab-topic>`, where `<kebab-topic>` is the plan filename
-  minus `-plan` (e.g. `docs/plans/rest-api-plan.md` → `feat/rest-api`).
+  minus `.md` (e.g. `docs/plans/rest-api.md` → `feat/rest-api`).
 - **`plan/` is a fifth branch prefix, and a special case**: `plan/<kebab-topic>` is the
   short-lived branch carrying a plan document up for async review (`issue-plan` §7). It is
   **not** a type — the ticket still takes exactly one of the four type labels and the matching
@@ -46,8 +46,8 @@ so they take no config arguments.
 
   | Column | Meaning |
   |--------|---------|
-  | Draft | Plan being written or under review |
-  | Ready | Plan locked; implementation not started |
+  | Draft | Approach not settled — plan being written/reviewed, or a planless ticket that still needs one |
+  | Ready | Approach settled; implementation not started |
   | In progress | Branch cut, milestones underway |
   | In review | Code milestones done, PR open |
   | Merged | In `main`; production rollout pending (issue closed at merge) |
@@ -68,14 +68,32 @@ so they take no config arguments.
    ```markdown
    <One or two sentences: the problem or capability, with the concrete symptom/value.>
 
-   - **Plan:** `docs/plans/<file>.md`   (omit if none yet)
-   - **Branch:** `<prefix>/<kebab-topic>`
+   - **Plan:** [`docs/plans/<file>.md`](https://github.com/<repo>/blob/main/docs/plans/<file>.md)   (omit if none yet)
+   - **Branch:** [`<prefix>/<kebab-topic>`](https://github.com/<repo>/tree/<prefix>/<kebab-topic>)
 
    **State:** <where things stand and the next action a fresh session can take>
    ```
 
-2. **Put the card on the board** and set its column (usually `Ready` for a locked plan,
-   `Draft` for one still forming):
+   **Both values are links, and the plan is always linked on `main`.** Plan →
+   `https://github.com/<repo>/blob/main/docs/plans/<file>.md`, never the branch the plan was
+   authored on, so the link survives that branch being deleted. Branch →
+   `https://github.com/<repo>/tree/<prefix>/<kebab-topic>`. Expect both to 404 at the moment
+   the ticket is filed — the plan only reaches `main` when it lands there, and the branch only
+   exists after its first push. That is fine and needs no follow-up edit: each link starts
+   resolving on its own as the work moves through the pipeline.
+
+   **Write the body unwrapped.** GitHub renders a newline inside a paragraph as a line
+   break, so prose hard-wrapped at 80 columns keeps those breaks at every browser width and
+   reads ragged. Each paragraph and each bullet is one unbroken line, however long, with
+   blank lines only between blocks — let the browser do the wrapping. Same rule for issue
+   comments (`issue-update`) and PR bodies (`issue-pr`); it is the opposite of the commit
+   convention, where messages *are* wrapped.
+
+2. **Put the card on the board** and set its column. The test is whether the approach is
+   settled, *not* whether a plan file exists — a small bug or chore whose fix is stated in
+   the issue body goes straight to `Ready` with no plan doc. Use `Draft` when a plan is still
+   being written or under review, and for a planless ticket whose `**State:**` line reads
+   "next action: author a plan" or otherwise still needs scoping:
 
    ```bash
    ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh status <issue#> "Ready"

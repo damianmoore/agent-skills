@@ -10,7 +10,7 @@ Five skills cover the lifecycle:
 
 | Skill | What it does |
 |-------|--------------|
-| `issue-plan` | Writes `docs/plans/<topic>-plan.md` in a fixed house format — a verified current-state section, locked decisions, and checkbox milestones sized for one subagent each — then files the ticket via `issue-create`. Its review gate runs interactively at a terminal or as an async **plan PR** (below). |
+| `issue-plan` | Writes `docs/plans/<topic>.md` in a fixed house format — a verified current-state section, locked decisions, and checkbox milestones sized for one subagent each — attached to the work's ticket, reusing an existing one where there is one and filing a new one via `issue-create` where there isn't. Its review gate runs interactively at a terminal or as an async **plan PR** (below). |
 | `issue-create` | Creates the GitHub issue with the house title/label/branch conventions and puts its card on the board. |
 | `issue-implement` | Runs a plan end to end: §0 questions, branch off `main`, per-milestone implement + separate adversarial verify subagent, configured lint/test commands, commit and push per milestone, PR at completion. |
 | `issue-pr` | Opens a reviewer-focused PR, assigns it to the configured reviewer, and moves the card to In review. |
@@ -40,8 +40,9 @@ project,read:project`), `jq`, and `bash`.
 ## Reviewing a plan: interactive, or as a plan PR
 
 Every plan passes a human gate before implementation starts, and `issue-plan` runs it one of
-two ways. At a terminal it asks its open questions interactively and the card lands in `Ready`
-as soon as the plan is locked. Headless — in a session pod, under `claude -p`, or whenever
+two ways. At a terminal it asks its open questions interactively, commits the plan to `main`
+(through a temporary worktree, so the branch you are on is left alone), and the card lands in
+`Ready` as soon as the plan is locked. Headless — in a session pod, under `claude -p`, or whenever
 async review is asked for — it instead ships the plan as a **plan PR**: the open questions
 become §0 entries with proposed defaults, the plan doc is committed to a `plan/<kebab-topic>`
 branch, and a PR labelled `plan` carries a summary plus those questions as task-list

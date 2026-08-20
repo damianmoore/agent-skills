@@ -1,6 +1,6 @@
 ---
 name: issue-implement
-description: Implement a docs/plans/*-plan.md in the house protocol — ask §0 questions, branch off main, per-milestone Opus implement + separate Opus adversarial verify, commit and push each milestone, PR via issue-pr at completion — while keeping the plan's Progress log and the ticket's card on the project's configured GitHub Projects board (per .agent/project.yml, via issue-update) current. Use when asked to implement, start, resume, or continue a plan.
+description: Implement a docs/plans/*.md plan in the house protocol — ask §0 questions, branch off main, per-milestone Opus implement + separate Opus adversarial verify, commit and push each milestone, PR via issue-pr at completion — while keeping the plan's Progress log and the ticket's card on the project's configured GitHub Projects board (per .agent/project.yml, via issue-update) current. Use when asked to implement, start, resume, or continue a plan.
 ---
 
 # Implement a plan

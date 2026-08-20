@@ -61,24 +61,27 @@ Push the branch if it has no upstream: `git push -u origin HEAD`.
 Sections scale with the diff — a two-file fix needs the first three, a milestone-sized
 branch needs all of them. Drop any section that would be padding, keep the order.
 
+**Write the body unwrapped.** GitHub renders a newline inside a paragraph as a line break,
+so prose hard-wrapped at 80 columns keeps those breaks at every browser width and reads
+ragged. Each paragraph and each bullet is one unbroken line, however long, with blank lines
+only between blocks — let the browser do the wrapping. This is the opposite of the commit
+convention: wrap commit messages, never wrap PR or issue bodies. The template below is
+shown unwrapped for that reason; it will look over-long in an editor, and that is correct.
+
 ```markdown
 ## What this does
 
-Two to four sentences: the problem, and the shape of the fix. Lead with the user-visible
-or system-visible behaviour change, not the implementation. If it fixes a bug, state the
-symptom the bug produced.
+Two to four sentences on one line: the problem, and the shape of the fix. Lead with the user-visible or system-visible behaviour change, not the implementation. If it fixes a bug, state the symptom the bug produced.
 
 ## Why
 
-The reason this change exists — the failure it prevents, the requirement it meets, the
-plan or milestone it belongs to. Link the plan doc under `docs/plans/` and the tracking
-issue. Skip if section 1 already makes it obvious.
+The reason this change exists — the failure it prevents, the requirement it meets, the plan or milestone it belongs to. Link the plan doc under `docs/plans/` and the tracking issue. Skip if section 1 already makes it obvious.
 
 ## What changed
 
 Grouped by area, each entry naming the file so a reviewer can jump straight there:
 
-- `project/apps/billing/limits.py` — new `plan_for()` resolution with sticky fail-open.
+- `server/billing/limits.py` — new `plan_for()` resolution with sticky fail-open.
 - `ui/components/PlanLimitNotice.tsx` — surfaces the cap to the user at the point of block.
 
 ## How to review this
@@ -87,29 +90,52 @@ The highest-value part of the description. Tell the reviewer:
 
 - **Start here** — the one or two files carrying the actual logic.
 - **Skim** — mechanical churn, renames, generated types, test fixtures.
-- **Scrutinise** — anything subtle: off-by-ones on limit checks, cache keys, fail-open vs
-  fail-closed branches, migration ordering, anything touching money or credits.
+- **Scrutinise** — anything subtle: off-by-ones on limit checks, cache keys, fail-open vs fail-closed branches, migration ordering, anything touching money or credits.
 
 ## Testing
 
-What was actually run and what it did — the exact command and its result, e.g. the repo's
-configured test command with its pass count (`make test`, 76 passed), e2e spec names, manual
-steps in the local app. If something was not tested, say so plainly here rather than leaving
-the reviewer to assume coverage.
+What was actually run and what it did — the exact command and its result, e.g. the repo's configured test command with its pass count (`make test`, 76 passed), e2e spec names, manual steps in the local app. If something was not tested, say so plainly here rather than leaving the reviewer to assume coverage.
 
 ## Risk and rollout
 
-Only when relevant: feature flags and their default state, DB migrations, config or secret
-changes, deploy ordering, and how to roll back.
+Only when relevant: feature flags and their default state, DB migrations, config or secret changes, deploy ordering against the release, and how to roll back.
 
 ## Out of scope
 
-Known follow-ups deliberately left for later, so the reviewer does not flag them as
-omissions. Note where they are tracked.
+Known follow-ups deliberately left for later, so the reviewer does not flag them as omissions. Note where they are tracked.
 ```
+
+### Required when the diff touches a committed API spec snapshot
+
+Repos that publish a versioned public API often commit a generated spec snapshot (an
+OpenAPI JSON, a GraphQL SDL) with a test that fails until it is regenerated — so the fix is
+always "run the regeneration command and commit", which anyone can do reflexively without
+asking what changed. **The snapshot diff detects change; it does not classify it.** A
+breaking change can ship on v1 that way without a single person deciding to.
+
+So a PR whose diff includes such a snapshot must carry a section stating the classification
+and the reason:
+
+```markdown
+## API compatibility
+
+**Non-breaking — ships on v1.** Adds an optional `updated_since` filter to `GET /reports` and a `first_seen_at` field to the item listing. Existing clients see no change to any request they already send or any field they already read.
+```
+
+Classify against these rules:
+
+- **Non-breaking, ships on the current version** — a new endpoint, a new optional parameter, a new response field, relaxed validation, a deprecation notice.
+- **Breaking, needs a new `/v2/…` route** — removing or renaming a field or endpoint, a type change, a new required parameter, a changed error code or status for an existing condition, changed pagination or envelope semantics.
+- **Breaking and invisible to the diff** — tightening a resolver's or handler's permission check changes what the API returns without altering the spec at all. If the diff touches code the API executes, say so here even when the snapshot is unchanged.
+
+Two rules for the reviewer's sake: name the *specific* additions rather than saying
+"regenerated snapshot", and if the change is breaking, the PR must add the v2 route rather
+than argue that no client will notice.
 
 Rules for the body:
 
+- One line per paragraph and per bullet, as above. A bullet that needs a second line uses a
+  real list item or a blank-line-separated paragraph, never a soft wrap.
 - Be concrete. "Fixes the off-by-one in `can_add_podcast` (`<` → `<=`)" beats "improves
   limit handling".
 - Accuracy over salesmanship. If a milestone is partly deferred, the PR body says which

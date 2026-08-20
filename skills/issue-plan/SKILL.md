@@ -1,6 +1,6 @@
 ---
 name: issue-plan
-description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for Opus subagents — and file its ticket on the project's configured GitHub Projects board (per .agent/project.yml) via issue-create. Also supports an async plan-PR review flow for headless or phone review, shipping the plan as a PR whose open questions are task-list checkboxes. Use when asked to plan a feature, fix, or migration, to turn an investigation into a plan document, or to put a plan up for async review — and equally for the back half of that flow, i.e. checking whether a plan PR has been approved, transcribing its answers, merging an approved plan PR, or moving a plan's card to Ready.
+description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for Opus subagents — attached to the work's ticket on the project's configured GitHub Projects board (per .agent/project.yml), reusing the existing ticket when there is one and filing a new one via issue-create when there isn't. Also supports an async plan-PR review flow for headless or phone review, shipping the plan as a PR whose open questions are task-list checkboxes. Use when asked to plan a feature, fix, or migration, to turn an investigation into a plan document, or to put a plan up for async review — and equally for the back half of that flow, i.e. checking whether a plan PR has been approved, transcribing its answers, merging an approved plan PR, or moving a plan's card to Ready.
 ---
 
 # Write an implementation plan
@@ -22,6 +22,7 @@ Repo-specific values live in `.agent/project.yml` in the repo you are working in
 needs these keys, read once at the start of the run:
 
 ```bash
+${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.repo                   # <repo> — owner/name
 ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh conventions.test_command ""   # test command, if any
 ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh conventions.lint_command ""   # lint command, if any
 ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh deploy.skill ""               # release skill, if any
@@ -32,6 +33,41 @@ or release skill, and the milestones below adapt accordingly — the rollout mil
 the release steps explicitly, and a `**Verify:**` line says plainly that the repo configures
 no test or lint command rather than inventing one. Keys read without a default exit non-zero
 when missing — tell the user to add them to `.agent/project.yml` rather than guessing.
+
+## Resolve the ticket first
+
+Every plan has exactly one ticket. Establish which one **before** writing, so the plan carries
+the right `**Ticket:**` link and §6 never files a duplicate.
+
+- **If the invocation names one** — `#57`, an issue URL, or "the webhooks ticket" — use it.
+  Read its body: it may already carry context, and its `**State:**` line says what was
+  expected next.
+
+  ```bash
+  gh issue view <number> -R <repo> --json number,title,state,labels,body
+  ```
+
+- **If it doesn't, search before concluding there is none.** Work is normally captured as a
+  ticket first, so a plan request usually *has* one already — typically sitting in **Draft**
+  with a `**State:**` line reading "next action: author a plan":
+
+  ```bash
+  gh issue list -R <repo> --state open --limit 100 \
+    --json number,title,labels \
+    --jq '.[] | "\(.number)\t\(.title)\t\([.labels[].name]|join(","))"'
+  ```
+
+  Match on topic, not exact wording — "plan rate limiting for the API" is covered by
+  `#56 API rate limiting`. Check `docs/plans/` for a file on the same topic while you are
+  there; if one exists this is an amendment to that plan, not a new one.
+
+- **If genuinely none exists**, there is nothing to reuse and §6 files one.
+
+When the match is arguable, ask rather than guess. Filing a second ticket for work that
+already has one splits its history across two cards, and the board is the single source of
+truth for status.
+
+---
 
 ## Review mode: interactive or plan PR
 
@@ -142,7 +178,7 @@ untouched, which an approval accepts at their proposed defaults.
 
 ## 3. Write the document
 
-`docs/plans/<kebab-topic>-plan.md`. Section order is fixed — copy `template.md` and fill it in:
+`docs/plans/<kebab-topic>.md` (no `-plan` suffix — the `plans/` directory already says so). Section order is fixed — copy `template.md` and fill it in:
 
 | § | Section | Content |
 |---|---------|---------|
@@ -201,7 +237,7 @@ via `issue-update`. Do **not** copy those steps into the plan; the top of §5 ca
 short pointer block from `template.md`, with the branch name filled in. Branch names follow
 `<prefix>/<kebab-topic>` with one of the standard prefixes — `feat/` (new capability),
 `fix/` (bug fix), `chore/` (tooling, docs, ops), `refactor/` (behaviour-preserving
-restructure) — where `<kebab-topic>` is usually the plan filename minus `-plan` (e.g.
+restructure) — where `<kebab-topic>` is usually the plan filename minus `.md` (e.g.
 `fix/feed-fetch-reliability`). Plan-specific process notes (a migration-collision warning, a
 "land X first" ordering constraint) do belong there, beneath the pointer.
 
@@ -209,23 +245,97 @@ restructure) — where `<kebab-topic>` is usually the plan filename minus `-plan
 
 - Do not implement anything while writing the plan. Authoring and implementing are separate
   sessions; the plan is the handoff.
-- **File the ticket via the `issue-create` skill**: board column `Ready` once the plan is
-  locked, `Draft` if it is not; type label matching the branch prefix, plus the `plan` label.
-  Add the resulting `**Ticket:** #NN` link to the plan's `**Status:**` line. The board —
+- **Settle the ticket, using whatever *Resolve the ticket first* turned up:**
+  - *A ticket already exists* — **do not file another.** Attach the plan to it: add a
+    `**Plan:**` line to the issue body if it has none (linked to `main`, as `issue-create`
+    step 1 shows), add the `plan` label, and move its card to `Ready` (or leave it in `Draft`
+    if the plan is not yet locked) via the `issue-update` skill.
+  - *No ticket exists* — file one via the `issue-create` skill: board column `Ready` (or
+    `Draft` if not yet locked), type label matching the branch prefix, plus the `plan` label.
+
+  Either way, add the `**Ticket:** #NN` link to the plan's `**Status:**` line. The board —
   not any repo file — is the single source of truth for status.
   **In async mode the column is always `Draft`** (the plan PR is what locks the plan), and
-  the ticket is filed **here, before §7 cuts the branch** — the plan PR body has to reference
-  `#NN`, and the plan doc that gets committed should already carry the ticket link.
+  the ticket is settled **here, before §7 cuts the branch** — the plan PR body has to
+  reference `#NN`, and the plan doc that gets committed should already carry the ticket link.
 - **If the repo keeps a `docs/todo.md`, remove any lines this plan covers** in the same
   session as filing the ticket. Per the note at the top of that file, `todo.md` holds only
   unplanned work — once a ticket exists on the board (in any column, including Draft or
   Parked), the ticket is the single tracker. In async mode those deletions ride along on the
   plan branch and land when the plan PR merges.
-- Report back with the path, the ticket number, the milestone count, any §0 questions still
-  open, and which `todo.md` lines were removed.
+- **In interactive mode, land the plan on `main`** — always, and never on a feature branch.
+  See below. In async mode the plan lands when its PR merges (§7.3), so skip it there.
+- Report back with the path, the ticket number **and whether it was reused or newly filed**,
+  the milestone count, any open questions still unanswered, which `todo.md` lines were
+  removed, and — interactive mode — the commit sha the plan landed on `main` as.
 
-**Interactive mode is done at this point.** In async mode the plan is not finished until its
-PR is open — continue to §7, and report the PR URL alongside everything above.
+### Interactive mode: land the plan on `main`
+
+A plan is a handoff document: `issue-implement` branches off `main` to work it, and any future
+session looking for it expects it there. A plan left uncommitted, or committed onto whatever
+feature branch happened to be checked out, is invisible to both. **So the plan is always
+committed, and always to `main`** — including the `todo.md` deletions above, which belong in
+the same commit.
+
+Follow the `git-commit` conventions for the message: one line, ≤72 chars, present-tense
+imperative, no AI/assistant attribution, no `Co-Authored-By` trailer. `Add <topic>
+implementation plan` for a new plan, `Update <topic> plan — <what changed>` when amending an
+existing one.
+
+**If `main` is already checked out**, commit in place:
+
+```bash
+git add -- docs/plans/<file>.md docs/todo.md   # todo.md only if it changed
+git commit -m "Add <topic> implementation plan"
+git push
+```
+
+**Otherwise — the normal case, since planning usually happens mid-branch — commit to `main`
+through a temporary worktree, leaving the current branch and its working tree untouched:**
+
+```bash
+plan=docs/plans/<file>.md
+msg="Add <topic> implementation plan"
+wt=".claude/worktrees/_plan-$(basename "$plan" .md)"
+
+git fetch origin main
+git worktree add "$wt" main
+git -C "$wt" merge --ff-only origin/main    # no-op when local main is already current
+cp "$plan" "$wt/$plan"                      # plus any docs/todo.md edit from above
+git -C "$wt" add -- "$plan"
+git -C "$wt" commit -m "$msg"
+git -C "$wt" push
+git worktree remove "$wt"
+rm -- "$plan"
+```
+
+Notes on that sequence:
+
+- **The `--ff-only` step is not optional.** Committing on a stale local `main` produces a push
+  that is rejected as non-fast-forward. If the fast-forward itself fails, local `main` has
+  diverged from the remote — stop and tell the user rather than merging or rebasing it.
+- **The final `rm` is deliberate.** Once the plan is on `main`, the untracked copy left behind
+  on the feature branch would block the next `git merge main` with *"untracked working tree
+  files would be overwritten"*. Read it from `main` instead — `git show main:$plan` — or wait
+  for it to arrive with the next merge. Say in the report that the working-tree copy was
+  removed, so nobody thinks it was lost.
+- **Restore any *tracked* file you carried over the same way** — `docs/todo.md`, or anything
+  else edited alongside the plan: `git checkout -- docs/todo.md`. The `rm` above only handles
+  the plan, which is untracked. A tracked file left modified on the feature branch gets folded
+  into that branch's next commit and then conflicts on the next merge from `main`.
+- Keep `.claude/worktrees/` out of version control (a line in `.git/info/exclude` does it
+  without touching the repo's `.gitignore`), so the temporary worktree never shows up as
+  untracked. Remove it even when a later step fails.
+- **If `git worktree add` fails with "main is already checked out"**, another worktree holds
+  it — commit there instead of creating a second one (`git worktree list` finds it).
+- **If the push is rejected, do not force.** Report it and stop; the commit is intact on local
+  `main`.
+- The ticket work itself is untouched by this — `issue-implement` still cuts its own branch
+  from `main` later, and picks the plan up from there.
+
+**Interactive mode is done once the plan is on `main`.** In async mode the plan is not
+finished until its PR is open — continue to §7, and report the PR URL alongside everything
+above.
 
 ---
 
@@ -305,7 +415,7 @@ shape of the fix. Lead with the user-visible symptom.>
 
 ## How to review this
 
-- **Read** `docs/plans/<kebab-topic>-plan.md` — §1 goal and non-goals, §2 decisions, §5 milestones.
+- **Read** `docs/plans/<kebab-topic>.md` — §1 goal and non-goals, §2 decisions, §5 milestones.
 - **Scrutinise** §2: those decisions are what the implementation will not re-litigate.
 - **Answer** the questions below — tick a box to accept its default, or reply in a comment
   to choose something else.
