@@ -232,7 +232,7 @@ Milestones are the part an agent works through, so they carry the most weight.
 
 The protocol itself lives in **one place: the `issue-implement` skill** — §0 questions first,
 branch off `main`, per-milestone Opus implement + separate Opus adversarial verify,
-`git-commit` skill + push per milestone, `issue-pr` skill at completion, ticket/board upkeep
+`/git-commit` + push per milestone, `issue-pr` skill at completion, ticket/board upkeep
 via `issue-update`. Do **not** copy those steps into the plan; the top of §5 carries only the
 short pointer block from `template.md`, with the branch name filled in. Branch names follow
 `<prefix>/<kebab-topic>` with one of the standard prefixes — `feat/` (new capability),
@@ -392,8 +392,8 @@ moved on since your checkout, git refuses the switch rather than clobber your ed
 that also changed upstream. Cut the branch *before* editing anything shared like
 `docs/todo.md` when that is a possibility.
 
-Then commit the plan doc — plus any `docs/todo.md` deletions from §6 — with the `git-commit`
-skill and push. Never commit the plan to `main` directly in this mode; merging the plan PR is
+Then commit the plan doc — plus any `docs/todo.md` deletions from §6 — with `/git-commit`
+and push. Never commit the plan to `main` directly in this mode; merging the plan PR is
 what puts it there.
 
 **No closing keywords in any commit message on this branch** — no `Closes #NN`, `Fixes #NN` or
@@ -531,7 +531,7 @@ Then, in this order:
    Anything genuinely unanswerable until implementation stays in §0 for `issue-implement`'s
    gate to pick up.
 3. **Flip the plan's status line** — the `**Status:**` header becomes `Ready to implement`.
-4. **Commit those edits with the `git-commit` skill and push.** They must land *inside* the
+4. **Commit those edits with `/git-commit` and push.** They must land *inside* the
    PR, so the plan that reaches `main` is the locked one.
 5. **Re-check the approval, now that you have pushed.** Under branch protection with "dismiss
    stale approvals when new commits are pushed", the transcription commit you just pushed

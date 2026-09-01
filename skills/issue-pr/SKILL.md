@@ -51,7 +51,7 @@ Stop and ask the user first if any of these hold:
 
 - Current branch is `main` — there is nothing to open a PR from.
 - A PR is already open for this branch — offer to update its body instead (`gh pr edit`).
-- Uncommitted changes exist — ask whether to commit them (via the `git-commit` skill) or
+- Uncommitted changes exist — ask whether to commit them (via `/git-commit`) or
   leave them out. Do not commit silently.
 
 Push the branch if it has no upstream: `git push -u origin HEAD`.

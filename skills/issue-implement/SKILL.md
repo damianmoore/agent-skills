@@ -106,7 +106,7 @@ For each milestone:
    pre-existing failure, so a red run is not automatically this milestone's fault. If a key
    is absent from `.agent/project.yml`, say so in the milestone report ("no lint command
    configured") and move on; don't invent one.
-4. **Commit via the `git-commit` skill, then `git push` — both before starting the next
+4. **Commit via `/git-commit`, then `git push` — both before starting the next
    milestone.** A milestone that is committed but not pushed is an unfinished milestone:
    sessions run in ephemeral pods, and a pod that disappears takes every unpushed commit with
    it, so the remote branch is the only durable record of the work. Push, read the push
