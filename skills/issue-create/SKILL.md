@@ -29,6 +29,11 @@ so they take no config arguments.
 
 - **Title** — the topic, short and concrete: `Feed fetch reliability`, not "fix the feeds".
   When a plan doc exists, use the same topic wording as its filename.
+- **Voice** — everything these skills write for a human (issue bodies, transition comments,
+  PR descriptions, Progress log lines, subagent handoffs and reports) is plain English:
+  short sentences, concrete nouns and file names, no process jargon. The reader is skimming
+  a board or a PR between other work, and current models drift verbose and jargon-heavy
+  unless the register is set once.
 - **One type label, matching the branch prefix.** Exactly one of `feat` / `fix` / `chore` /
   `refactor` — the same word the work's branch will start with
   (label `fix` ↔ branch `fix/feed-fetch-reliability`). Pick by the nature of the work:
@@ -114,4 +119,5 @@ so they take no config arguments.
    those skills. Skip the step in repos with no such file.
 
 5. Report the issue number and URL, noting any `todo.md` lines removed. All later state changes go through the `issue-update`
-   skill — never edit status prose into repo files.
+   skill — never edit status prose into repo files: it goes stale on every branch that does
+   not carry the edit, which is how README status tables end up conflicting between branches.

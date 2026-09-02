@@ -58,7 +58,9 @@ tracking `origin/main` pushes **straight to remote `main`** (this really happene
 `--no-track`). Publish the branch immediately and check the push output reads
 `-> <branch-name>`, not `-> main`.
 
-One branch for the whole plan; never work on `main`. Use the branch name the plan specifies.
+One branch for the whole plan; never work on `main` — the PR is the review gate, and a
+commit on `main` skips it and cannot be undone without rewriting shared history. Use the
+branch name the plan specifies.
 If it doesn't specify one, derive it from the plan filename as `<prefix>/<kebab-topic>` with
 one of the standard prefixes: `feat/` (new capability), `fix/` (bug fix), `chore/` (tooling,
 docs, ops), `refactor/` (behaviour-preserving restructure) — e.g. `fix/feed-fetch-reliability`.
@@ -82,22 +84,54 @@ releasable; never a state where `main` could not ship.
 
 For each milestone:
 
-1. **Implement with an Opus subagent.** Give it the milestone text, the §4 subsections it
-   cites, and the repo conventions. The orchestrating agent stays the orchestrator —
-   reasoning effort is inherited, so run the session at high effort.
-2. **Verify with a different Opus subagent.** It gets the milestone's `Verify` / `Done when`
-   lines and the diff, and is instructed to hunt adversarially for the ways the work is
-   wrong — off-by-ones in limit checks, inverted fail-open branches, swallowed errors,
-   migration collisions — and to report defects, not fix or rubber-stamp. It also checks that
-   **the previous milestone actually reached the remote**: `git log --oneline origin/<branch>..HEAD`
-   must be empty except for commits belonging to the milestone under review (at verify time
-   the current milestone is often not committed yet, so an empty range is normal). Any commit
-   from an **earlier** milestone still sitting unpushed in that range is a defect to report,
-   not a detail to overlook. Fix findings; re-verify until clean.
+1. **Implement with an Opus subagent.** Its prompt is the **implement brief** — the whole
+   job, its reason, its guardrails and its exit criteria, in one message; the agent then
+   runs unattended. The orchestrating agent stays the orchestrator — reasoning effort is
+   inherited, so run the session at high effort.
+
+   - **Job** — "Read `docs/plans/<file>.md` in full, then implement M<n>." Point at the
+     file rather than excerpting it: the lede, §1 goal and non-goals, §2 decisions and the
+     §5 process notes are the *why* and the guardrails the implementer falls back on when a
+     box is silent, and a prompt that forwards only the milestone text and §4 drops them.
+     A plan is a few hundred lines — reading it costs far less than the fix round one wrong
+     judgement call produces.
+   - **Scope** — the milestone's boxes are the whole scope; anything else the agent notices
+     goes in the handoff as a note, not a change. Current models over-do rather than
+     under-do, and an unasked-for change comes back from the verify agent as a defect.
+   - **Repo conventions** — the project's configured commands (`conventions.lint_command`,
+     `conventions.test_command`, with `conventions.test_notes` quoted alongside) and the
+     pattern files the milestone cites.
+   - **Self-testing** — run the configured test command, scoped to the files it touches
+     where the runner allows, and hand off only once those tests pass. Ask for the tests
+     *run*, not for a re-read of its own diff: the model checks its own work unprompted,
+     and the verify agent in step 2 is the deliberate second pair of eyes, so a
+     "double-check before handing off" line only adds tokens.
+   - **Handoff shape** — evidence rather than assertions, in this order, about 15 lines:
+     files changed; tests run, with the command and its result; deviations from the plan,
+     with the reason; out-of-scope notes. The orchestrator feeds the handoff to the verify
+     prompt and the Progress log line, so a fixed shape makes both mechanical.
+2. **Verify with a different Opus subagent.** It gets the **verify brief** — read the plan
+   in full (the lede and §1 goal let it judge intent, not just literal compliance), the
+   milestone's `Verify` / `Done when` lines, the diff, and the implementer's handoff — and
+   is instructed to hunt adversarially for the ways the work is wrong — off-by-ones in limit
+   checks, inverted fail-open branches, swallowed errors, migration collisions — and to
+   report defects, not fix or rubber-stamp. It also checks that **the previous milestone
+   actually reached the remote**: `git log --oneline origin/<branch>..HEAD` must be empty
+   except for commits belonging to the milestone under review (at verify time the current
+   milestone is often not committed yet, so an empty range is normal). Any commit from an
+   **earlier** milestone still sitting unpushed in that range is a defect to report, not a
+   detail to overlook.
+
+   It reports only gaps that affect correctness or the plan's stated requirements: a
+   reviewer asked to find gaps reports some even when the work is sound, and chasing style
+   findings produces defensive code and tests for cases that cannot happen. Report shape:
+   one line per defect, `file:line — what is wrong — the Done-when line or §2 row it
+   violates`; "no defects" is a legitimate one-line report. Fix findings; re-verify until
+   clean.
 
    ```
-   Agent(model: "opus", prompt: "<milestone text + §4 design + repo conventions>")
-   Agent(model: "opus", prompt: "Verify M<n> ... adversarially; report defects, do not fix; confirm earlier milestones are pushed")
+   Agent(model: "opus", prompt: "<implement brief — step 1>")
+   Agent(model: "opus", prompt: "<verify brief — step 2; report defects, do not fix; confirm earlier milestones are pushed>")
    ```
 3. **Run the project's configured checks.** Run `conventions.lint_command` exactly as
    configured — it is the repo's own command and defines its own scope — then

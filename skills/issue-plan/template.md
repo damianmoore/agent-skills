@@ -96,15 +96,17 @@ treatment tables, rollout/flag behaviour.>
 ## 5. Milestones
 
 Instructions for implementing agents: run this plan with the **`issue-implement` skill** — do
-not free-hand the process. It covers §0 questions, branching (branch name:
+not free-hand the process: it carries the branch, gate and board rules this plan deliberately
+does not repeat. It covers §0 questions, branching (branch name:
 `<feat|fix|chore|refactor>/<kebab-topic>`), per-milestone Opus implement + separate Opus
 adversarial verify, commits/pushes, the PR, and keeping this plan's Progress log and the
 ticket's board card (via the `issue-update` skill) current.
 
 ### M1 — <Coherent slice, sized for one Opus subagent (~3–8 boxes)>
 
-- [ ] <Self-contained box: the change, the file (`path:line` where it exists today), the §4
-      subsection carrying the design, the pattern file to copy>
+- [ ] <Self-contained box: the end state, the reason for any constraint, the file
+      (`path:line` where it exists today — a pointer for finding it, not an edit
+      instruction), the §4 subsection carrying the design, the pattern file to copy>
 - [ ] <Migration box: app + number, schema/data/seed, reverse behaviour>
 - [ ] Tests: <the cases to cover, named; the existing test file whose pattern to follow>
 

@@ -52,7 +52,8 @@ Stop and ask the user first if any of these hold:
 - Current branch is `main` — there is nothing to open a PR from.
 - A PR is already open for this branch — offer to update its body instead (`gh pr edit`).
 - Uncommitted changes exist — ask whether to commit them (via `/git-commit`) or
-  leave them out. Do not commit silently.
+  leave them out. Do not commit silently — the user may be keeping those changes out of
+  this PR on purpose, and a stray commit on a reviewed branch is the hardest kind to unpick.
 
 Push the branch if it has no upstream: `git push -u origin HEAD`.
 
@@ -140,8 +141,10 @@ Rules for the body:
   limit handling".
 - Accuracy over salesmanship. If a milestone is partly deferred, the PR body says which
   part and why.
-- Never mention Claude, AI, or assistant tooling. No `Co-Authored-By` or "Generated with"
-  trailers — this applies to PR bodies exactly as it does to commit messages.
+- Never mention Claude, AI, or assistant tooling — the PR and the git history are written
+  for the people maintaining the code, and tooling attribution is noise to them. No
+  `Co-Authored-By` or "Generated with" trailers; this applies to PR bodies exactly as it
+  does to commit messages.
 - End the body with `Closes #NN` when the work has a ticket (the plan's `**Status:**` line
   carries the number; the `issue-update` skill explains how to find it otherwise). The
   closing keyword is load-bearing: merging into `main` closes the issue, and the project

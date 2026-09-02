@@ -106,11 +106,13 @@ bearing — every claim in it must have been checked against the code or a live 
 *this* session, and carry a `path/to/file.py:123` reference a reviewer can jump to. Never
 write §3 from memory, from `CLAUDE.md`, or from a prior conversation summary.
 
-Fan out to gather it. Independent questions go in one message so the agents run concurrently:
+Fan out to gather it. Independent questions go in one message so the agents run concurrently.
+Research agents are not pinned to a faster tier — they inherit the session model, because §3
+is load-bearing and a weak map costs more to re-verify than the stronger model costs to run:
 
 ```
-Agent(subagent_type: "Explore", model: "opus")  — locate the write paths / call sites / models
-Agent(subagent_type: "Explore", model: "opus")  — inventory the frontend entrypoints and existing UI patterns
+Agent(subagent_type: "Explore")  — locate the write paths / call sites / models
+Agent(subagent_type: "Explore")  — inventory the frontend entrypoints and existing UI patterns
 ```
 
 What §3 has to establish before the design can be trusted:
@@ -123,22 +125,40 @@ What §3 has to establish before the design can be trusted:
 - For bug-fix plans: the **blast radius**, measured. Query the dev DB or prod read-only and put
   real counts in the plan ("747 episodes stuck, 652 of them from one host"), not adjectives.
 
-## 2. Ask the open questions **before** writing
+## 2. Interview the user **before** writing
 
-Anything that would change the shape of the plan is settled now, not left as a `TODO` in the
-document. In interactive mode that means asking: use `AskUserQuestion`, batched (up to 4 per
-call), recommended option first and labelled `(Recommended)`. In async plan-PR mode the same
-questions are written down instead — see the subsection at the end of this section; the rest
-of the section applies unchanged to both.
+The plan is the brief a fresh session implements from, so this interview is where the
+unknowns surface — cheaply, before they become a fix round. Anything that would change the
+shape of the plan is settled now, not left as a `TODO` in the document. In interactive mode
+that means asking: use `AskUserQuestion`, recommended option first and labelled
+`(Recommended)`; batch independent questions (up to 4 per call) and ask one at a time when
+an answer would change what to ask next. In async plan-PR mode the same questions are
+written down instead — see the subsection at the end of this section; the rest of the
+section applies unchanged to both.
 
-Ask about things like: which behaviour is intended when the rule bites; whether existing
-over-limit or broken data gets migrated, grandfathered, or left; fail-open vs fail-closed;
-whether it ships behind a feature flag and at what default; scope boundaries you are about to
-assume ("I am treating personal workspaces as in scope — correct?"); anything that costs money,
-touches billing, or sends email to real users.
+Two questions are standing — asked whenever the request has not already answered them —
+because they feed the sections the implementer reads for intent:
+
+- **Who is this for, and what does it enable?** → the lede and §1 Goal. An implementer
+  facing a choice the plan did not anticipate decides it from this.
+- **What would you check to call it done?** → the rollout milestone's `Done when` and the
+  PR's Testing section. Current models over-do rather than under-do; the exit criterion is
+  what stops them.
+
+Then dig into the hard parts the user may not have considered — edge cases, trade-offs,
+concerns — rather than confirming what the code already says. Things like: which behaviour
+is intended when the rule bites; whether existing over-limit or broken data gets migrated,
+grandfathered, or left; fail-open vs fail-closed; whether it ships behind a feature flag and
+at what default; scope boundaries you are about to assume ("I am treating personal
+workspaces as in scope — correct?"); anything that costs money, touches billing, or sends
+email to real users.
 
 Do **not** ask what the code can answer, or what has a conventional default. Decide those and
-record them as decisions.
+record them as decisions — the user's attention is the scarce input here.
+
+When the request arrives as a brain-dump (a voice note, a long ramble), first structure it
+into job / why / guardrails / done, play that reading back in one message, and interview
+from the gaps in it rather than from the ramble.
 
 Every answer becomes a row in **§2 Decisions (locked)** with the decision, not the discussion.
 
@@ -207,10 +227,16 @@ Milestones are the part an agent works through, so they carry the most weight.
 - **Each is one subagent's job.** Size it to fit comfortably in one Opus context: roughly
   3–8 checkboxes over a coherent slice (backend foundation / enforcement / frontend plumbing /
   one UI surface / rollout). Split anything bigger.
-- **Every box is self-contained**: name the file, the line range where it exists today, the
-  §4 subsection carrying the design, and the pattern file to copy. A box that reads
-  `- [ ] Add validation` is a defect; `- [ ] Seat check in UserInviteMutation.mutate
-  (§4.4.1 — before invitee User creation; re-invites of existing members exempt)` is the bar.
+- **Every box is self-contained and states an end state, not a keystroke sequence**, with
+  the reason for any constraint it imposes: name the file, the `path:line` where the code
+  lives today, the §4 subsection carrying the design, and the pattern file to copy. A box
+  that reads `- [ ] Add validation` is a defect; `- [ ] Seat check in
+  UserInviteMutation.mutate (§4.4.1 — before invitee User creation; re-invites of existing
+  members exempt)` is the bar, and "keep every captcha assertion as it is — that is the
+  anti-regression guard on hCaptcha" is how a constraint reads. Line numbers are for
+  *finding* the code, not instructions to edit those lines: they have usually moved by the
+  time the milestone runs, and an implementer that knows the outcome and the why does the
+  right thing when they have, where one told "delete `:676` and `:688`" does not.
 - **Tests are a box, not an afterthought**, and they name the cases to cover and the existing
   test file whose pattern to follow.
 - Each milestone ends with two lines:
