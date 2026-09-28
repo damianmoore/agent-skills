@@ -1,116 +1,143 @@
 ---
 name: issue-create
-description: Create a GitHub issue for a piece of work and put its card on the project's configured GitHub Projects board (per .agent/project.yml), with the house title, label, and branch-name conventions. Use when asked to create/file a ticket or issue for work; issue-plan calls this when a plan is authored.
+description: Create a ticket for a piece of work in the project's configured tracker (a GitHub issue by default) and put its card on the board (per .agent/project.yml), with the house title, label, and branch-name conventions. Use when asked to create/file a ticket or issue for work; issue-plan calls this when a plan is authored.
 ---
 
 # Create a ticket
 
-Every unit of tracked work is one GitHub issue on the configured repo plus a card on that
-project's board (Projects v2). **The board is the single source of truth for status** —
-there are no status tables in the repo. Plan documents under `docs/plans/` carry the design
-and milestone detail; the ticket carries the state.
+Every unit of tracked work is one ticket in the project's tracker plus a card on its board.
+**The board is the single source of truth for status** — there are no status tables in the
+repo. Plan documents under `docs/plans/` carry the design and milestone detail; the ticket
+carries the state.
 
-## Project config
+## Tools and config (shared by issue-plan, issue-update, issue-implement, issue-pr)
 
-Everything repo-specific lives in `.agent/project.yml` in the repo you are working in. Read
-the keys this skill needs **once**, at the start of the run, and substitute the values into
-the commands below wherever they show `<repo>`:
+The skills never call a tracker's or forge's CLI directly. Two scripts carry every such call,
+each dispatching to an adapter chosen by `.agent/project.yml` (`tracker.type`,
+`forge.type`; both default to `github` — a GitHub issue on a Projects v2 board, and a pull
+request):
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.repo   # <repo> — owner/name
+${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh <verb> …   # tickets, labels, comments, the board
+${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh <verb> …     # review requests, and links to code
 ```
 
-The helper exits non-zero and names the missing file or key. When that happens, tell the
-user to add it to `.agent/project.yml` (the plugin README documents the schema) — never
-guess a repo or board name. `board.sh` and `bootstrap-board.sh` read the config themselves,
-so they take no config arguments.
+Run either with no arguments for its verbs. They read the config themselves and take no
+repo or board arguments; when a key is missing they exit non-zero and name it — tell the user
+to add it to `.agent/project.yml` (the plugin README documents the schema), never guess a
+repo or board name. For other repo-specific values, read them once at the start of a run:
+`${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh <section.key> [default]`.
 
-## Conventions (shared by issue-plan, issue-update, issue-implement, issue-pr)
+`<id>` below is the tracker's ticket id (`42` on GitHub). **Always build ticket references,
+links and closing text with the scripts** (`tracker.sh link <id>`, `tracker.sh closing-ref
+<id>`, `forge.sh link <n>`) rather than writing `#42` or a URL by hand: each tracker spells
+them differently, and the closing text is load-bearing.
+
+## Conventions
 
 - **Title** — the topic, short and concrete: `Feed fetch reliability`, not "fix the feeds".
   When a plan doc exists, use the same topic wording as its filename.
-- **Voice** — everything these skills write for a human (issue bodies, transition comments,
-  PR descriptions, Progress log lines, subagent handoffs and reports) is plain English:
-  short sentences, concrete nouns and file names, no process jargon. The reader is skimming
-  a board or a PR between other work, and current models drift verbose and jargon-heavy
-  unless the register is set once.
+- **Voice** — everything these skills write for a human (ticket bodies, transition comments,
+  review-request descriptions, Progress log lines, subagent handoffs and reports) is plain
+  English: short sentences, concrete nouns and file names, no process jargon. The reader is
+  skimming a board or a PR between other work, and current models drift verbose and
+  jargon-heavy unless the register is set once.
 - **One type label, matching the branch prefix.** Exactly one of `feat` / `fix` / `chore` /
   `refactor` — the same word the work's branch will start with
   (label `fix` ↔ branch `fix/feed-fetch-reliability`). Pick by the nature of the work:
   `feat` new capability, `fix` bug fix, `chore` tooling/docs/ops, `refactor`
   behaviour-preserving restructure.
-- **Branch name** — `<prefix>/<kebab-topic>`, where `<kebab-topic>` is the plan filename
-  minus `.md` (e.g. `docs/plans/rest-api.md` → `feat/rest-api`).
+- **Branch name** — `tracker.sh branch <type> <kebab-topic>`, where `<kebab-topic>` is the
+  plan filename minus `.md` (e.g. `docs/plans/rest-api.md` → `feat/rest-api` on GitHub; a
+  tracker that links branches by ticket key puts the key in the name).
 - **`plan/` is a fifth branch prefix, and a special case**: `plan/<kebab-topic>` is the
   short-lived branch carrying a plan document up for async review (`issue-plan` §7). It is
   **not** a type — the ticket still takes exactly one of the four type labels and the matching
   implementation branch, so `plan/feed-fetch-reliability` and `fix/feed-fetch-reliability` are
-  the same work at two stages. It pairs with the repo's `plan` label, which means "has a plan
-  doc", never a work type.
-- **Board columns** (in flow order):
+  the same work at two stages. It pairs with the `plan` label, which means "has a plan doc",
+  never a work type.
+- **The lifecycle** — the skills move cards by **lifecycle key**; `.agent/project.yml`'s
+  `statuses:` section maps each key to the board's own column name, so a board may call
+  `in_review` "Code Review", or put `merged` and `released` in one "Done" column (moving
+  between two keys that share a column is a no-op). `tracker.sh statuses` prints the map.
+  In flow order:
 
-  | Column | Meaning |
-  |--------|---------|
-  | Draft | Approach not settled — plan being written/reviewed, or a planless ticket that still needs one |
-  | Ready | Approach settled; implementation not started |
-  | In progress | Branch cut, milestones underway |
-  | In review | Code milestones done, PR open |
-  | Merged | In `main`; production rollout pending (issue closed at merge) |
-  | Released | Deployed to prod / complete |
-  | Parked | Deliberately not scheduled |
+  | Key | Default column | Meaning |
+  |-----|----------------|---------|
+  | `draft` | Draft | Approach not settled — plan being written/reviewed, or a planless ticket that still needs one |
+  | `ready` | Ready | Approach settled; implementation not started |
+  | `in_progress` | In progress | Branch cut, milestones underway |
+  | `in_review` | In review | Code milestones done, review request open |
+  | `merged` | Merged | In `main`; production rollout pending (ticket closed at merge, where the tracker does that) |
+  | `released` | Released | Deployed to prod / complete |
+  | `parked` | Parked | Deliberately not scheduled |
+
+  Prose in these skills names the default columns (Ready, In review…); commands pass keys.
 
 ## Steps
 
-1. **Create the issue.** Write the body to a scratchpad file, then:
+1. **Create the ticket.** Write the body to a scratchpad file, then:
 
    ```bash
-   gh issue create -R <repo> \
-     --title "<topic>" --label "<type>" --body-file <scratchpad>/issue-body.md
+   ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh create <type> "<topic>" <scratchpad>/issue-body.md   # prints "<id>\t<url>"
    ```
+
+   Pass `plan` as an extra trailing argument when the work has a plan doc — it adds the label
+   alongside the type.
 
    Body shape (short — the plan doc holds the detail):
 
    ```markdown
    <One or two sentences: the problem or capability, with the concrete symptom/value.>
 
-   - **Plan:** [`docs/plans/<file>.md`](https://github.com/<repo>/blob/main/docs/plans/<file>.md)   (omit if none yet)
-   - **Branch:** [`<prefix>/<kebab-topic>`](https://github.com/<repo>/tree/<prefix>/<kebab-topic>)
+   - **Plan:** [`docs/plans/<file>.md`](<forge.sh file-url docs/plans/<file>.md>)   (_none yet_ if there is no plan doc)
+   - **Branch:** [`<branch>`](<forge.sh branch-url <branch>>)
+   - **PR:** _none yet_
 
    **State:** <where things stand and the next action a fresh session can take>
    ```
 
-   **Both values are links, and the plan is always linked on `main`.** Plan →
-   `https://github.com/<repo>/blob/main/docs/plans/<file>.md`, never the branch the plan was
-   authored on, so the link survives that branch being deleted. Branch →
-   `https://github.com/<repo>/tree/<prefix>/<kebab-topic>`. Expect both to 404 at the moment
-   the ticket is filed — the plan only reaches `main` when it lands there, and the branch only
-   exists after its first push. That is fine and needs no follow-up edit: each link starts
-   resolving on its own as the work moves through the pipeline.
+   **All three bullets are always present, in this order, and each value is either a link
+   or the placeholder `_none yet_`** — never omit a bullet because its value doesn't exist
+   yet. Plan → `forge.sh file-url docs/plans/<file>.md`, which links the file on the base
+   branch, never on the branch the plan was authored on, so the link survives that branch
+   being deleted. Branch → `forge.sh branch-url <branch>`. PR → `forge.sh link <pr>`. (The
+   bullet is labelled **PR** whatever the forge calls it — `forge.sh noun` gives the word
+   for prose.)
 
-   **Write the body unwrapped.** GitHub renders a newline inside a paragraph as a line
+   Plan and Branch are linked from the start, even though both 404 at the moment the ticket
+   is filed — the plan only reaches `main` when it lands there, and the branch only exists
+   after its first push. Their URLs are known in advance, so each link starts resolving on
+   its own and needs no follow-up edit. The PR number isn't known until the PR exists, so
+   that bullet starts as `_none yet_` and `issue-pr` fills it in when it opens the PR. Plan
+   reads `_none yet_` only on a ticket with no plan doc; `issue-plan` fills it in if one is
+   written later.
+
+   **Write the body unwrapped.** Trackers render a newline inside a paragraph as a line
    break, so prose hard-wrapped at 80 columns keeps those breaks at every browser width and
    reads ragged. Each paragraph and each bullet is one unbroken line, however long, with
-   blank lines only between blocks — let the browser do the wrapping. Same rule for issue
+   blank lines only between blocks — let the browser do the wrapping. Same rule for ticket
    comments (`issue-update`) and PR bodies (`issue-pr`); it is the opposite of the commit
    convention, where messages *are* wrapped.
 
 2. **Put the card on the board** and set its column. The test is whether the approach is
    settled, *not* whether a plan file exists — a small bug or chore whose fix is stated in
-   the issue body goes straight to `Ready` with no plan doc. Use `Draft` when a plan is still
+   the ticket body goes straight to `ready` with no plan doc. Use `draft` when a plan is still
    being written or under review, and for a planless ticket whose `**State:**` line reads
    "next action: author a plan" or otherwise still needs scoping:
 
    ```bash
-   ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh status <issue#> "Ready"
+   ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh set-status <id> ready
    ```
 
-   If this fails with a scope error, the token needs `gh auth refresh -s project,read:project`
-   — tell the user, and note the pending board step in your report; the issue itself is
-   already created. If the board doesn't exist yet, run
-   `${CLAUDE_PLUGIN_ROOT}/skills/issue-update/bootstrap-board.sh` first.
+   If this fails with a scope or permission error, relay the script's fix to the user (on
+   GitHub: `gh auth refresh -s project,read:project`) and note the pending board step in
+   your report; the ticket itself is already created. A rate-limit error means wait, not
+   re-auth. If the board doesn't exist yet, run `${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh
+   bootstrap` first.
 
 3. **Cross-reference the plan.** If a plan doc exists, its `**Status:**` header line gains a
-   ticket link: `**Status:** Ready to implement · **Ticket:** [#NN](https://github.com/<repo>/issues/NN) · **Date:** …`.
+   ticket link (`tracker.sh link <id>`): `**Status:** Ready to implement · **Ticket:** [#NN](…) · **Date:** …`.
 
 4. **Sweep `docs/todo.md`, if the repo keeps one.** Delete any lines the new ticket covers —
    per the note at the top of that file, `todo.md` holds only unplanned work, and the item is
@@ -118,6 +145,7 @@ so they take no config arguments.
    sweep, but don't rely on them: a ticket filed directly (e.g. a bug) may never pass through
    those skills. Skip the step in repos with no such file.
 
-5. Report the issue number and URL, noting any `todo.md` lines removed. All later state changes go through the `issue-update`
-   skill — never edit status prose into repo files: it goes stale on every branch that does
-   not carry the edit, which is how README status tables end up conflicting between branches.
+5. Report the ticket id and URL, noting any `todo.md` lines removed. All later state changes
+   go through the `issue-update` skill — never edit status prose into repo files: it goes
+   stale on every branch that does not carry the edit, which is how README status tables end
+   up conflicting between branches.

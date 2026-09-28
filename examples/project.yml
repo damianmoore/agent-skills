@@ -2,18 +2,40 @@
 #
 # Copy to `.agent/project.yml` in the root of a repo that uses the issue-* skills and commit
 # it. Two levels only: a section, then `key: value` scalars. Values may be bare, "double
-# quoted", or 'single quoted'; `#` starts a comment.
+# quoted", or 'single quoted'; `#` starts a comment. Lists are space-separated strings.
 
-github:
-  owner: damianmoore                # required — Projects v2 board owner (user or org login)
-  repo: damianmoore/audio-audit     # required — owner/name of the repo the issues live in
-  project_title: "Audio Audit"      # required — Projects v2 board title (created by bootstrap-board.sh)
-  assignee: damianmoore             # required — login PRs are assigned to for human review
+tracker:
+  type: github                      # optional — adapter for tickets and the board (default github)
+  repo: damianmoore/audio-audit     # required (github) — owner/name of the repo the issues live in
+  board_owner: damianmoore          # optional (github) — Projects v2 board owner; default: the repo's owner
+  board_title: "Audio Audit"        # required (github) — board title (created by `tracker.sh bootstrap`)
+
+forge:
+  type: github                      # optional — adapter for review requests (default github)
+  repo: damianmoore/audio-audit     # required (github) — owner/name of the code repo
+  reviewer: damianmoore             # optional — login PRs are assigned to for human review
+  base_branch: main                 # optional — branch review requests target (default main)
+
+statuses:                           # optional — board column per lifecycle key; unset keys keep the default name
+  ready: Ready
+  in_review: "In review"
+  # draft / in_progress / merged / released / parked — two keys may share a column
 
 conventions:
-  test_command: make test           # optional — run per milestone by issue-implement
-  lint_command: "ruff check --fix . && ruff format ."   # optional — run per milestone before the tests
-  test_notes: "known pre-existing failure: test_speech_recognition"  # optional — free text, quoted alongside test results
+  lint_command: "ruff check --fix <files> && ruff format <files>"   # optional — run first on each handoff; <files> = touched files
+  iterate_command: "make test <path>"   # optional — fast targeted tests for implement agents and fix rounds
+  test_command: make test-gate      # optional — the milestone-close gate, run in the background; the authority
+  test_notes: "make test-lf reruns the last failures"   # optional — free text, quoted alongside test results
+
+agents:
+  implement_model: sonnet           # optional — implement subagents' model; "session" inherits the session model
+
+plans:
+  examples: "docs/plans/archive/some-feature.md docs/plans/archive/some-fix.md"   # optional — reference plans
+
+pr:
+  screenshots_guide: docs/agents/pr-screenshots.md   # optional — repo's guide to booting/seeding for UI screenshots
+  api_snapshots: "docs/api/openapi-v1.json"          # optional — committed API spec snapshots
 
 deploy:
   skill: deploy-production          # optional — project-specific release skill in .claude/skills/

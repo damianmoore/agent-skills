@@ -1,6 +1,6 @@
 ---
 name: issue-implement
-description: Implement a docs/plans/*.md plan in the house protocol — ask §0 questions, branch off main, per-milestone Opus implement + separate Opus adversarial verify, commit and push each milestone, PR via issue-pr at completion — while keeping the plan's Progress log and the ticket's card on the project's configured GitHub Projects board (per .agent/project.yml, via issue-update) current. Use when asked to implement, start, resume, or continue a plan.
+description: Implement a docs/plans/*.md plan in the house protocol — ask §0 questions, branch off main, per-milestone implement subagent (Sonnet by default) + session-model adversarial verify lenses, commit and push each milestone, PR via issue-pr at completion — while keeping the plan's Progress log and the ticket's card on the project's configured GitHub Projects board (per .agent/project.yml, via issue-update) current. Use when asked to implement, start, resume, or continue a plan.
 ---
 
 # Implement a plan
@@ -10,33 +10,34 @@ implementation protocol**: plans reference it instead of embedding the steps, an
 older plan still carries its own protocol block in §5, **this skill supersedes that block**
 (the plan's milestones, designs, and decisions still rule — only the process text yields).
 
-## Project config
+## Tools and config
 
-Everything repo-specific lives in `.agent/project.yml` in the repo you are working in. Read
-these **once**, at the start of the run, and substitute the values wherever the commands
-below show `<repo>`:
+Ticket, board and review-request calls go through `tracker.sh` / `forge.sh` (see
+`issue-create`, *Tools and config*), which read the tracker and forge settings themselves.
+Read the rest of the repo-specific values **once**, at the start of the run:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.repo                # <repo> — owner/name
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh conventions.lint_command ""
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh conventions.test_command ""
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh conventions.test_notes ""
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh deploy.skill ""
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.lint_command ""     # lint/format; <files> = touched files
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.iterate_command ""  # fast targeted tests; <path> = file/dir
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.test_command ""     # the milestone-close gate
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.test_notes ""
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh agents.implement_model sonnet
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh pr.screenshots_guide ""
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh deploy.skill ""
 ```
 
-The trailing `""` is a default — those keys are optional and an empty result means "the
-project doesn't define one". Keys read without a default (`github.repo`) exit non-zero when
-missing: tell the user to add them to `.agent/project.yml` (the plugin README has the schema)
-rather than guessing. `board.sh` and `bootstrap-board.sh` read the config themselves, so they
-take no config arguments.
+The trailing argument is a default — those keys are optional and an empty result means "the
+project doesn't define one". A `<files>` or `<path>` in a configured command is a placeholder
+you fill in: the files the milestone touched, or the test file or directory being iterated
+on. When a script exits non-zero naming a missing key, tell the user to add it to
+`.agent/project.yml` (the plugin README has the schema) rather than guessing.
 
 ## 0. Pick the plan and read it
 
 - If the user named a plan, use it. Otherwise list the candidates from the board —
-  `gh issue list -R <repo> --state open --search '"docs/plans/" in:body'`
-  (plan-backed issues link their plan doc in the body; Ready column, plus
-  In progress for resumes; `${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh show <n>`
-  gives a card's column) — and ask which one via `AskUserQuestion`.
+  `${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh list ready`, plus `tracker.sh list in_progress`
+  for resumes (plan-backed tickets carry the `plan` label and link their plan doc in the
+  body) — and ask which one via `AskUserQuestion`.
 - Read the **whole plan file** (linked from the issue body) before doing anything. The
   Progress log tells you where a resumed plan actually is — trust it over the checkboxes
   if they disagree, and say so.
@@ -61,8 +62,9 @@ tracking `origin/main` pushes **straight to remote `main`** (this really happene
 One branch for the whole plan; never work on `main` — the PR is the review gate, and a
 commit on `main` skips it and cannot be undone without rewriting shared history. Use the
 branch name the plan specifies.
-If it doesn't specify one, derive it from the plan filename as `<prefix>/<kebab-topic>` with
-one of the standard prefixes: `feat/` (new capability), `fix/` (bug fix), `chore/` (tooling,
+If it doesn't specify one, derive it from the plan filename with
+`${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh branch <type> <kebab-topic>` (`<prefix>/<kebab-topic>`
+on GitHub) using one of the standard prefixes: `feat/` (new capability), `fix/` (bug fix), `chore/` (tooling,
 docs, ops), `refactor/` (behaviour-preserving restructure) — e.g. `fix/feed-fetch-reliability`.
 If the plan specifies a name without a prefix, add the appropriate one and update the plan's
 §5 pointer block to match.
@@ -82,12 +84,27 @@ that rule and items added since.)
 Work milestones **in order** — each is independently committable and leaves the app
 releasable; never a state where `main` could not ship.
 
+**Model policy.** Implement agents run on the configured `agents.implement_model` (Sonnet
+unless the project says otherwise) — plans are written so the implementer is not
+redesigning, and the verify pass plus the gate backstop it. A plan escalates a milestone by
+putting `**Model:** session — <reason>` directly under the milestone heading; spawn that
+milestone's implement agent with no `model` param. The same goes for every milestone when
+the configured value is `session`. Verify agents are never pinned: they inherit the session
+model so the adversarial pass always runs on the strongest model available, never below the
+implementer's tier. The orchestrating agent stays the orchestrator — reasoning effort is
+inherited, so run the session at high effort.
+
+```
+Agent(model: "<agents.implement_model>", prompt: "<implement brief — step 1 below>")
+Agent(prompt: "<verify brief + lens — step 2 below>")   # no model param — inherits the session model
+```
+
 For each milestone:
 
-1. **Implement with an Opus subagent.** Its prompt is the **implement brief** — the whole
-   job, its reason, its guardrails and its exit criteria, in one message; the agent then
-   runs unattended. The orchestrating agent stays the orchestrator — reasoning effort is
-   inherited, so run the session at high effort.
+1. **Implement with a subagent on the configured model** (session model when the milestone
+   carries the escalation line). Its prompt is the **implement brief** — the whole job, its
+   reason, its guardrails and its exit criteria, in one message; the agent then runs
+   unattended:
 
    - **Job** — "Read `docs/plans/<file>.md` in full, then implement M<n>." Point at the
      file rather than excerpting it: the lede, §1 goal and non-goals, §2 decisions and the
@@ -97,56 +114,83 @@ For each milestone:
      judgement call produces.
    - **Scope** — the milestone's boxes are the whole scope; anything else the agent notices
      goes in the handoff as a note, not a change. Current models over-do rather than
-     under-do, and an unasked-for change comes back from the verify agent as a defect.
-   - **Repo conventions** — the project's configured commands (`conventions.lint_command`,
-     `conventions.test_command`, with `conventions.test_notes` quoted alongside) and the
-     pattern files the milestone cites.
-   - **Self-testing** — run the configured test command, scoped to the files it touches
-     where the runner allows, and hand off only once those tests pass. Ask for the tests
-     *run*, not for a re-read of its own diff: the model checks its own work unprompted,
-     and the verify agent in step 2 is the deliberate second pair of eyes, so a
-     "double-check before handing off" line only adds tokens.
+     under-do, and an unasked-for change lands under the verify lenses as a defect.
+   - **Repo conventions** — the pointers it needs from the repo's `CLAUDE.md` / `AGENTS.md`,
+     the project's configured commands (with `conventions.test_notes` quoted alongside), and
+     the pattern files the milestone cites.
+   - **Self-testing** — iterate with `conventions.iterate_command` on the files it touches
+     (or, when none is configured, `conventions.test_command` scoped as narrowly as the
+     runner allows) and hand off only once those targeted tests pass. Ask for the tests
+     *run*, not for a re-read of its own diff: the model checks its own work unprompted, and
+     the lenses in step 2 are the deliberate second pair of eyes, so a "double-check before
+     handing off" line only adds tokens.
    - **Handoff shape** — evidence rather than assertions, in this order, about 15 lines:
      files changed; tests run, with the command and its result; deviations from the plan,
-     with the reason; out-of-scope notes. The orchestrator feeds the handoff to the verify
-     prompt and the Progress log line, so a fixed shape makes both mechanical.
-2. **Verify with a different Opus subagent.** It gets the **verify brief** — read the plan
-   in full (the lede and §1 goal let it judge intent, not just literal compliance), the
-   milestone's `Verify` / `Done when` lines, the diff, and the implementer's handoff — and
-   is instructed to hunt adversarially for the ways the work is wrong — off-by-ones in limit
-   checks, inverted fail-open branches, swallowed errors, migration collisions — and to
-   report defects, not fix or rubber-stamp. It also checks that **the previous milestone
-   actually reached the remote**: `git log --oneline origin/<branch>..HEAD` must be empty
-   except for commits belonging to the milestone under review (at verify time the current
-   milestone is often not committed yet, so an empty range is normal). Any commit from an
-   **earlier** milestone still sitting unpushed in that range is a defect to report, not a
-   detail to overlook.
+     with the reason; out-of-scope notes. The orchestrator feeds the handoff to the lens
+     prompts and the Progress log line, so a fixed shape makes both mechanical.
+2. **On the handoff, lint first, then start the gate and the verify lenses — in one
+   message.** Run `conventions.lint_command` on the touched files *before* anything else —
+   it costs seconds, and a lint edit after the gate starts would invalidate it by step 3's
+   rule. Then start:
+   - The milestone-close gate — `conventions.test_command` — as a **background** Bash. It is
+     the authority on whether the milestone is green. When the project configures none, say
+     so in the milestone report ("no test command configured") and skip it; don't invent
+     one.
+   - The **verify lenses**, spawned in parallel in that same message. Each gets the
+     **verify brief** — read the plan in full (the lede and §1 goal let it judge intent, not
+     just literal compliance), the milestone's `Verify` / `Done when` lines, the diff, and
+     the implementer's handoff — followed by its lens:
+     - **Lens A — Done-when/correctness** (always): does the diff satisfy each Done-when;
+       hunt off-by-ones in limit checks, inverted fail-open branches, swallowed errors,
+       migration collisions.
+     - **Lens B — blast radius/conventions** (always): call sites of every changed function,
+       write paths the milestone should have touched but didn't, drift from the pattern
+       files the plan cites. It also checks that **the previous milestone actually reached
+       the remote**: `git log --oneline origin/<branch>..HEAD` must be empty except for
+       commits belonging to the milestone under review (at verify time the current milestone
+       is often not committed yet, so an empty range is normal). Any commit from an
+       **earlier** milestone still sitting unpushed in that range is a defect to report.
+     - **Lens C — test adequacy** (when the milestone adds or changes tests): would the new
+       tests fail if the feature broke; are the plan's named cases actually covered.
 
-   It reports only gaps that affect correctness or the plan's stated requirements: a
-   reviewer asked to find gaps reports some even when the work is sound, and chasing style
-   findings produces defensive code and tests for cases that cannot happen. Report shape:
-   one line per defect, `file:line — what is wrong — the Done-when line or §2 row it
-   violates`; "no defects" is a legitimate one-line report. Fix findings; re-verify until
-   clean.
+     Every lens reports defects only — no fixing, no rubber-stamping — and only gaps that
+     affect correctness or the plan's stated requirements: a reviewer asked to find gaps
+     reports some even when the work is sound, and chasing style findings produces
+     defensive code and tests for cases that cannot happen. Report shape: one line per
+     defect, `file:line — what is wrong — the Done-when line or §2 row it violates`; "no
+     defects" is a legitimate one-line report. Merge and dedupe the findings yourself
+     before fixing anything.
+3. **Fix the findings.** Fix rounds iterate with `conventions.iterate_command` (or a
+   targeted run of the test command), never in a way that shares state with the background
+   gate — `conventions.test_notes` says how when the project's test runs share a database or
+   cache. Any fix after the gate started invalidates it: re-run it, in the background again,
+   after the last fix.
+4. **Confirm, scoped.** One confirmation agent gets the fix diff and the findings list — not
+   the whole milestone. Repeat a full lens round only when the fixes were structural (new
+   files, changed signatures). If the confirmation reports defects, loop back to step 3 —
+   the milestone commits only on a clean confirmation.
+5. **Reconcile the gate output, then commit via `/git-commit` and `git push`.** Read the
+   latest background gate task's result — green means green on the *final* tree, so a run
+   that started before the last fix does not count. Judge it from the output, not just the
+   exit code, unless `conventions.test_notes` says the exit code is trustworthy; read it with
+   `conventions.test_notes` alongside, since that records things like a known pre-existing
+   failure, so a red run is not automatically this milestone's fault. The milestone's
+   checkbox ticks and its Progress log line (date, milestone, one-line summary, commit hash)
+   ride in that same commit.
 
-   ```
-   Agent(model: "opus", prompt: "<implement brief — step 1>")
-   Agent(model: "opus", prompt: "<verify brief — step 2; report defects, do not fix; confirm earlier milestones are pushed>")
-   ```
-3. **Run the project's configured checks.** Run `conventions.lint_command` exactly as
-   configured — it is the repo's own command and defines its own scope — then
-   `conventions.test_command`, and fix what they flag. Read the results with
-   `conventions.test_notes` quoted alongside them — it records things like a known
-   pre-existing failure, so a red run is not automatically this milestone's fault. If a key
-   is absent from `.agent/project.yml`, say so in the milestone report ("no lint command
-   configured") and move on; don't invent one.
-4. **Commit via `/git-commit`, then `git push` — both before starting the next
-   milestone.** A milestone that is committed but not pushed is an unfinished milestone:
-   sessions run in ephemeral pods, and a pod that disappears takes every unpushed commit with
-   it, so the remote branch is the only durable record of the work. Push, read the push
-   output, and confirm it names your branch. Only then start the next milestone. Tick the
-   milestone's boxes and append a Progress log line (date, milestone, one-line summary,
-   commit hash) in the same commit or the next.
+   **Push before starting the next milestone.** A milestone that is committed but not
+   pushed is an unfinished milestone: sessions can run in ephemeral pods, and a pod that
+   disappears takes every unpushed commit with it, so the remote branch is the only durable
+   record of the work. Read the push output and confirm it names your branch.
+6. **Start the next milestone's implement agent, then do the bookkeeping.** The `gh`
+   ticket/board calls (the `issue-update` skill) happen while that agent runs — they gate
+   nothing. (On the last milestone there is no next agent — do the bookkeeping and move to
+   §3.)
+
+**Test in tiers.** The implement agent and the fix rounds iterate with the fast, targeted
+command; closing the milestone and going to PR runs the full gate (`conventions.test_command`)
+— step 2's background run is exactly that. No fast target substitutes for the gate. When the
+repo documents a finer cadence (its `CLAUDE.md`, or `conventions.test_notes`), follow it.
 
 **When reality differs from the design, amend the plan in place.** The deviation and its
 reason go into the Progress log entry, naming what was built instead and why. Never silently
@@ -168,10 +212,12 @@ Comment on the ticket with a first line that starts `blocked:`. That prefix is t
 convention and it is what makes the block findable later:
 
 ```bash
-gh issue comment <issue#> -R <repo> --body "blocked: <the question, in one line>
+${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh comment <id> <<'EOF'
+blocked: <the question, in one line>
 
 <what you tried, what each possible answer would mean you do next, and what is
-already committed and pushed>"
+already committed and pushed>
+EOF
 ```
 
 One question per comment. If two things are blocking you, say both — but lead with the one
@@ -254,6 +300,11 @@ for when nobody comes.
   open the PR with the `issue-pr` skill — it links the PR to the ticket and moves the card to
   **In review** (per the `issue-update` skill). Rollout milestones that need prod access
   stay unticked and are called out in the PR body. Update the plan's `**Status:**` line.
+- **UI changes get screenshots in the PR body** when the project configures
+  `pr.screenshots_guide` (`issue-pr` §5). They show the pushed head, so the orchestrator
+  captures them once, after the last milestone's push. Implement agents never capture, and
+  nothing is shot mid-milestone. Once the PR is open, any fix round or review response that
+  changes pictured UI replaces the section before that round counts as done.
 - **The production rollout milestone is normally the founder's**, not the agent's — leave it
   to them unless told otherwise. Merging the PR closes the issue and the board moves the card
   to **Merged** automatically; whoever runs the rollout (usually via the project's configured

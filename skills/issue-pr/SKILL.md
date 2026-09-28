@@ -1,26 +1,29 @@
 ---
 name: issue-pr
-description: Open a GitHub PR for the current branch with a reviewer-focused summary, assigned to the project's configured reviewer, and move the work's ticket to In review on the project's configured GitHub Projects board (per .agent/project.yml). Use when asked to create/open/raise a PR, make a pull request, or push a branch for review. This is the implementation PR; a plan-review PR on a plan/ branch belongs to issue-plan §7 instead.
+description: Open a pull request (or the configured forge's review request) for the current branch with a reviewer-focused summary (plus screenshots of any UI change when the project configures a screenshots guide, kept current as later pushes change it), assigned to the project's configured reviewer, and move the work's ticket to In review on the project's configured board (per .agent/project.yml). Use when asked to create/open/raise a PR, make a pull request, push a branch for review, or refresh a PR's screenshots. This is the implementation PR; a plan-review PR on a plan/ branch belongs to issue-plan §7 instead.
 ---
 
 # Create a pull request
 
 Opens a PR for the current branch against `main`, writes a description aimed squarely at
-the person reviewing it, and assigns it to the project's configured reviewer.
+the person reviewing it, adds screenshots when the diff changes the UI (and the project
+configures a screenshots guide), and assigns it to the project's configured reviewer.
 
-## Project config
+## Tools and config
 
-The reviewer is repo-specific and lives in `.agent/project.yml` in the repo you are working
-in. Read it **once**, at the start of the run, and substitute it wherever the commands below
-show `<assignee>`:
+Every forge and tracker call goes through `forge.sh` / `tracker.sh` (see `issue-create`,
+*Tools and config*); they read the repo, reviewer and board from `.agent/project.yml`
+themselves. This skill also reads, **once**, at the start of the run:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.assignee   # <assignee>
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh pr.screenshots_guide ""   # repo's screenshot guide, if any
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh pr.api_snapshots ""       # committed API spec snapshots, if any
 ```
 
-The helper exits non-zero and names the missing file or key. When that happens, tell the user
-to add it to `.agent/project.yml` (the plugin README documents the schema) — never guess a
-login. `board.sh` reads the config itself, so it takes no config arguments.
+Both are optional: empty means the project takes no PR screenshots, or names no API
+snapshots (the §2 API-compatibility rule then still applies to any spec snapshot you spot in
+the diff). "PR" below means whatever the forge calls a review request (`forge.sh noun` —
+"MR" on GitLab); use that word in anything you write for a human.
 
 ## 1. Gather context
 
@@ -31,15 +34,15 @@ git rev-parse --abbrev-ref HEAD                  # current branch
 git status --short                               # uncommitted work?
 git log --oneline main..HEAD                     # commits in this branch
 git diff main...HEAD --stat                      # files + churn
-gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --state open --json number,url
+${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh current-review   # open PR for this branch, if any
 ```
 
 **Check the branch first: plan PRs are not this skill's job.** If the current branch is
 `plan/*`, or what you are being asked to open is the review gate for a plan document rather
 than for code, stop here and follow **`issue-plan` §7** instead — those PRs are titled
-`Plan: <topic>`, end their body `Part of #NN` (a closing keyword would close the ticket, and
-the board's *Item closed* automation would slam the card from Draft straight to Merged before
-any of the work existed), and leave the card in `Draft`, so §5's In review move does not apply
+`Plan: <topic>`, end their body with `tracker.sh mention-ref` rather than the closing ref (a
+closing ref would close the ticket, and a tracker that moves closed cards would slam it from
+Draft straight to Merged before any of the work existed), and leave the card in `draft`, so §6's In review move does not apply
 either. Everything below is for the **implementation** PR.
 
 Then read the **actual diff** — `git diff main...HEAD` — before summarising. Never write a
@@ -47,10 +50,15 @@ PR body from commit messages alone; commit subjects say what was done, the diff 
 a reviewer needs to check. For large diffs read the substantive files in full and skim
 generated/lockfile churn.
 
+While reading, note whether the diff changes what a user sees in the app. The project's
+`pr.screenshots_guide` defines which paths count; when the project configures no guide,
+skip screenshots entirely. If it does, the PR gets screenshots in §5.
+
 Stop and ask the user first if any of these hold:
 
 - Current branch is `main` — there is nothing to open a PR from.
-- A PR is already open for this branch — offer to update its body instead (`gh pr edit`).
+- A PR is already open for this branch — offer to update its body instead, with
+  `forge.sh get-body <n>` / `forge.sh set-body <n> <file>`.
 - Uncommitted changes exist — ask whether to commit them (via `/git-commit`) or
   leave them out. Do not commit silently — the user may be keeping those changes out of
   this PR on purpose, and a stray commit on a reviewed branch is the hardest kind to unpick.
@@ -108,7 +116,8 @@ Known follow-ups deliberately left for later, so the reviewer does not flag them
 
 ### Required when the diff touches a committed API spec snapshot
 
-Repos that publish a versioned public API often commit a generated spec snapshot (an
+The paths are in `pr.api_snapshots` when the project names them; otherwise recognise one by
+shape. Repos that publish a versioned public API often commit a generated spec snapshot (an
 OpenAPI JSON, a GraphQL SDL) with a test that fails until it is regenerated — so the fix is
 always "run the regeneration command and commit", which anyone can do reflexively without
 asking what changed. **The snapshot diff detects change; it does not classify it.** A
@@ -135,6 +144,8 @@ than argue that no client will notice.
 
 Rules for the body:
 
+- Don't write a `## Screenshots` section here. §5 inserts it after "What changed" once the
+  PR exists, captured from the pushed head.
 - One line per paragraph and per bullet, as above. A bullet that needs a second line uses a
   real list item or a blank-line-separated paragraph, never a soft wrap.
 - Be concrete. "Fixes the off-by-one in `can_add_podcast` (`<` → `<=`)" beats "improves
@@ -145,65 +156,90 @@ Rules for the body:
   for the people maintaining the code, and tooling attribution is noise to them. No
   `Co-Authored-By` or "Generated with" trailers; this applies to PR bodies exactly as it
   does to commit messages.
-- End the body with `Closes #NN` when the work has a ticket (the plan's `**Status:**` line
-  carries the number; the `issue-update` skill explains how to find it otherwise). The
-  closing keyword is load-bearing: merging into `main` closes the issue, and the project
-  board's built-in **Item closed** workflow moves the card to **Merged**. A neutral
-  `Tracking issue: #NN` would leave the card stranded in In review. This rule is for
-  implementation PRs; a plan PR ends `Part of #NN` instead — see §1.
+- End the body with the ticket's closing reference when the work has a ticket —
+  `tracker.sh closing-ref <id>` prints it (`Closes #42` on GitHub; the plan's `**Status:**`
+  line carries the id, and the `issue-update` skill explains how to find it otherwise). It is
+  load-bearing where `tracker.sh capabilities` says `closes_on_merge=yes`: merging into
+  `main` closes the ticket, and on GitHub the board's built-in *Item closed* workflow moves
+  the card to **Merged**. A neutral "Tracking issue: #42" would leave the card stranded in
+  In review. This rule is for implementation PRs; a plan PR ends with `tracker.sh
+  mention-ref <id>` instead — see §1.
 - Closing the ticket at merge does **not** mean the work is done — **Merged** still means
   "in `main`, rollout pending". Released is a separate, manual move on the already-closed
-  issue.
+  ticket.
 
 ## 3. Title
 
 One line, present-tense imperative, aiming for ≤72 characters — same convention as commit
 messages. `Enforce per-plan podcast and seat limits`, not `plan limits stuff` and not
-`Fix/plan-limits-enforcement` (the branch-name default `gh` would otherwise pick).
+`Fix/plan-limits-enforcement` (the branch-name default a forge would otherwise pick).
 
 Match the repo's existing style if unsure: `git log -10 --pretty=%s`.
 
 ## 4. Open it
 
-Write the body to a scratchpad file rather than fighting shell quoting in `--body`:
+Write the body to a scratchpad file rather than fighting shell quoting, then open it from
+the current branch into the base branch:
 
 ```bash
-gh pr create \
-  --base main \
-  --title "<imperative title>" \
-  --body-file /path/to/scratchpad/pr-body.md \
-  --assignee <assignee>
+${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh open "<imperative title>" <scratchpad>/pr-body.md   # prints "<n>\t<url>"
 ```
 
-Then request review. GitHub rejects a review request from the PR's own author, so this
-step is expected to fail whenever the configured reviewer is the same account that opened
-the PR:
+That assigns the PR to the configured reviewer and requests their review. A forge may refuse
+a review request from the PR's own author (GitHub does), so when the configured reviewer
+opened the PR the script reports "review request skipped … assigned instead" — that is
+normal and not a problem to report; say so in one clause and move on. If a different
+collaborator should review, ask who and run `forge.sh request-review <n> <login>`.
+
+## 5. Screenshots (UI changes only)
+
+When §1 found app UI changes and the project configures `pr.screenshots_guide`, add
+screenshots of the pushed head to the body now that the PR exists. Two documents carry the
+how-to: `screenshots.md` in this skill's directory (the generic mechanics — choosing shots,
+cropping with Playwright, uploading through GitHub, patching the body) and the project's own
+guide (which paths count as UI, and how to boot and seed the pushed commit). Read both before
+the first shot. In outline:
+
+1. Confirm the tree is clean and `HEAD` equals `origin/<branch>`. Then boot that commit as the
+   project guide describes, and seed it.
+2. Capture a few tight crops with Playwright: the changed element plus a little context, at a
+   1280px viewport. Aim for four or fewer. Describe wording-only variants in text rather than
+   shooting them.
+3. Upload them through the PR's comment box in the browser. Never submit the comment.
+4. Patch the body to add a `## Screenshots` section after "What changed".
+
+If the browser profile isn't signed in to GitHub, the PR is still open and the rest of this
+skill still runs. Report the screenshots as pending the user's sign-in, and finish them once
+they have signed in.
+
+**Every later push that changes pictured UI replaces the whole section** with a fresh set from
+the new head (`screenshots.md` §7). That applies whoever pushes: a fix round, a review
+response, or a rebase.
+
+## 6. Update the ticket
+
+Per the `issue-update` skill: move the card to **In review**, leave a comment with the PR
+link and what remains (e.g. the rollout milestone and whose it is), and fill in the ticket
+body's `**PR:**` bullet — replace its `_none yet_` placeholder with `forge.sh link <pr>`, and
+bring the `**State:**` line up to date in the same edit. Implementation PRs only — a plan PR
+leaves the card in `draft` (§1):
 
 ```bash
-gh pr edit --add-reviewer <assignee> 2>&1 || true
+${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh set-status <id> in_review
+${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh comment <id> "In review on $(${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh link <pr>) (branch \`<branch>\`). <what remains>"
+${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh get-body <id> > <scratchpad>/issue-body.md
+# set the **PR:** bullet and **State:** line in that file, then:
+${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh set-body <id> <scratchpad>/issue-body.md
 ```
 
-If it fails with "review cannot be requested from pull request author", that is normal and
-not an error to report as a problem — the `--assignee` above already puts the PR on their
-list. Say so in one clause and move on. If a different collaborator should review, ask who
-and use `--add-reviewer <login>` for them instead.
-
-## 5. Update the ticket
-
-Per the `issue-update` skill: move the card to **In review** and leave a comment with the
-PR link and what remains (e.g. the rollout milestone and whose it is). Implementation PRs
-only — a plan PR leaves the card in `Draft` (§1):
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh status <issue#> "In review"
-gh issue comment <issue#> --body "In review on PR #<pr> (branch \`<branch>\`). <what remains>"
-```
+On an older ticket with no `**PR:**` bullet, add one under `**Branch:**`.
 
 If the branch has no ticket (untracked one-off work), skip this — don't invent one for a
 trivial change.
 
-## 6. Report back
+## 7. Report back
 
-Give the user the PR URL, the title, the ticket moved (or that none exists), and a
-one-line note on what still needs a human (assignee set, review-request skipped as
-self-review, tests pending, flag still off).
+Give the user the PR URL, the title, the ticket moved (or that none exists), and whether
+the body has screenshots (how many, or why none: no UI change, no screenshots guide
+configured, or pending a GitHub sign-in). Add a one-line note on what still needs a human
+(assignee set, review-request skipped as self-review, tests pending, flag still off).

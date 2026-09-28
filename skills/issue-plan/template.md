@@ -1,6 +1,6 @@
 # <Problem or feature, stated concretely — not the branch name>
 
-**Status:** Ready to implement · **Ticket:** [#NN](https://github.com/<repo>/issues/NN) · **Date:** <YYYY-MM-DD>
+**Status:** Ready to implement · **Ticket:** <tracker.sh link <id>, e.g. [#NN](…)> · **Date:** <YYYY-MM-DD>
 
 <Lede, 2–3 paragraphs, no heading. The problem in concrete terms with evidence: what is
 broken or missing, the customer-visible symptom, real numbers from prod/dev where relevant,
@@ -98,11 +98,14 @@ treatment tables, rollout/flag behaviour.>
 Instructions for implementing agents: run this plan with the **`issue-implement` skill** — do
 not free-hand the process: it carries the branch, gate and board rules this plan deliberately
 does not repeat. It covers §0 questions, branching (branch name:
-`<feat|fix|chore|refactor>/<kebab-topic>`), per-milestone Opus implement + separate Opus
-adversarial verify, commits/pushes, the PR, and keeping this plan's Progress log and the
+`<feat|fix|chore|refactor>/<kebab-topic>`), per-milestone implement agent + separate
+session-model adversarial verify, commits/pushes, the PR, and keeping this plan's Progress log and the
 ticket's board card (via the `issue-update` skill) current.
 
-### M1 — <Coherent slice, sized for one Opus subagent (~3–8 boxes)>
+### M1 — <Coherent slice, sized for one subagent (~3–8 boxes)>
+
+<!-- Optional, only when this milestone needs the session model (migrations, billing,
+     concurrency): **Model:** session — <reason> -->
 
 - [ ] <Self-contained box: the end state, the reason for any constraint, the file
       (`path:line` where it exists today — a pointer for finding it, not an edit
@@ -110,8 +113,9 @@ ticket's board card (via the `issue-update` skill) current.
 - [ ] <Migration box: app + number, schema/data/seed, reverse behaviour>
 - [ ] Tests: <the cases to cover, named; the existing test file whose pattern to follow>
 
-**Verify:** <exact commands — the repo's configured test and lint commands, narrowed to the
-area under change — plus the manual walkthrough when behaviour is user-visible.>
+**Verify:** <exact commands — the repo's configured iterate, test and lint commands, narrowed
+to the area under change — plus the manual walkthrough when behaviour is user-visible. The
+last code milestone before the PR names the full gate (`conventions.test_command`).>
 **Done when:** <an observable end state the verification subagent can answer true/false on.>
 
 ### M2 — <…>
@@ -131,6 +135,10 @@ area under change — plus the manual walkthrough when behaviour is user-visible
 - [ ] Sweep `docs/todo.md`, if the repo keeps one, for lines this plan resolves that were
       added after authoring (lines it covered at authoring were already removed then);
       append final Progress log entry
+- [ ] Close out the ticket: move the card to **Released** via the `issue-update` skill and
+      archive the plan per `issue-implement` §3 (the release skill does this when the
+      rollout is a deploy; when it is not — content publication, DNS, vendor steps — this
+      box is the only trigger)
 
 **Done when:** <the end-to-end prod state.>
 

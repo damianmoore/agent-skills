@@ -1,6 +1,6 @@
 ---
 name: issue-plan
-description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for Opus subagents — attached to the work's ticket on the project's configured GitHub Projects board (per .agent/project.yml), reusing the existing ticket when there is one and filing a new one via issue-create when there isn't. Also supports an async plan-PR review flow for headless or phone review, shipping the plan as a PR whose open questions are task-list checkboxes. Use when asked to plan a feature, fix, or migration, to turn an investigation into a plan document, or to put a plan up for async review — and equally for the back half of that flow, i.e. checking whether a plan PR has been approved, transcribing its answers, merging an approved plan PR, or moving a plan's card to Ready.
+description: Write an implementation plan under docs/plans/ in this repo's house format — verified current-state section, locked decisions, checkbox milestones sized for one subagent each — attached to the work's ticket on the project's configured board (per .agent/project.yml), reusing the existing ticket when there is one and filing a new one via issue-create when there isn't. Also supports an async plan-PR review flow for headless or phone review, shipping the plan as a PR whose open questions are task-list checkboxes. Use when asked to plan a feature, fix, or migration, to turn an investigation into a plan document, or to put a plan up for async review — and equally for the back half of that flow, i.e. checking whether a plan PR has been approved, transcribing its answers, merging an approved plan PR, or moving a plan's card to Ready.
 ---
 
 # Write an implementation plan
@@ -8,43 +8,48 @@ description: Write an implementation plan under docs/plans/ in this repo's house
 Produces `docs/plans/<topic>.md` in the same format as the existing plans, written so a
 **fresh agent with no memory of this conversation** can pick it up and implement it end to end.
 
-Read one or two recent plans under `docs/plans/` (including `docs/plans/archive/`) in this
-repo in full before writing, when any exist — ideally one feature plan and one bug-fix plan,
-since they exercise different sections. In a repo with none, the reference is `template.md`
-in this skill's directory: follow its structure closely. Start from `template.md` either way.
+Read one or two recent plans in full before writing. When the project config names reference
+plans (`plans.examples`, below), read those; otherwise pick from `docs/plans/` (including
+`docs/plans/archive/`) — ideally one feature plan and one bug-fix plan, since they exercise
+different sections. In a repo with none, the reference is `template.md` in this skill's
+directory: follow its structure closely. Start from `template.md` either way.
 
 The plan is a working document, not a proposal: it gets ticked, appended to, and amended in
 place while the work happens.
 
-## Project config
+## Tools and config
 
-Repo-specific values live in `.agent/project.yml` in the repo you are working in. This skill
-needs these keys, read once at the start of the run:
+Ticket, board and review-request calls go through `tracker.sh` / `forge.sh` (see
+`issue-create`, *Tools and config*), which read the tracker and forge settings themselves.
+This skill also needs these keys, read once at the start of the run:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.repo                   # <repo> — owner/name
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh conventions.test_command ""   # test command, if any
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh conventions.lint_command ""   # lint command, if any
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh deploy.skill ""               # release skill, if any
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.test_command ""      # milestone-close gate, if any
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.iterate_command ""   # fast targeted tests, if any
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.lint_command ""      # lint command, if any
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh agents.implement_model sonnet    # implement agents' default model
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh plans.examples ""               # reference plans, if any
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh deploy.skill ""                 # release skill, if any
 ```
 
-The trailing `""` is the default: an empty result means the project defines no such command
-or release skill, and the milestones below adapt accordingly — the rollout milestone names
-the release steps explicitly, and a `**Verify:**` line says plainly that the repo configures
-no test or lint command rather than inventing one. Keys read without a default exit non-zero
-when missing — tell the user to add them to `.agent/project.yml` rather than guessing.
+The trailing argument is the default: an empty result means the project defines no such
+command, example or release skill, and the milestones below adapt accordingly — the rollout
+milestone names the release steps explicitly, and a `**Verify:**` line says plainly that the
+repo configures no test or lint command rather than inventing one. When a script exits
+non-zero naming a missing key, tell the user to add it to `.agent/project.yml` rather than
+guessing.
 
 ## Resolve the ticket first
 
 Every plan has exactly one ticket. Establish which one **before** writing, so the plan carries
 the right `**Ticket:**` link and §6 never files a duplicate.
 
-- **If the invocation names one** — `#57`, an issue URL, or "the webhooks ticket" — use it.
+- **If the invocation names one** — `#57`, a ticket URL, or "the webhooks ticket" — use it.
   Read its body: it may already carry context, and its `**State:**` line says what was
   expected next.
 
   ```bash
-  gh issue view <number> -R <repo> --json number,title,state,labels,body
+  ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh view <id>
   ```
 
 - **If it doesn't, search before concluding there is none.** Work is normally captured as a
@@ -52,9 +57,8 @@ the right `**Ticket:**` link and §6 never files a duplicate.
   with a `**State:**` line reading "next action: author a plan":
 
   ```bash
-  gh issue list -R <repo> --state open --limit 100 \
-    --json number,title,labels \
-    --jq '.[] | "\(.number)\t\(.title)\t\([.labels[].name]|join(","))"'
+  ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh search            # every open ticket: id, title, labels
+  ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh search "<words>"  # or narrowed by topic
   ```
 
   Match on topic, not exact wording — "plan rate limiting for the API" is covered by
@@ -202,7 +206,7 @@ untouched, which an approval accepts at their proposed defaults.
 
 | § | Section | Content |
 |---|---------|---------|
-| — | Title + `**Status:** … · **Ticket:** #NN · **Date:** …` | Status is `Ready to implement`, `Draft — not scheduled`, or `Draft for review`; the ticket link is added in step 6. In async mode the plan is authored as `Draft for review` and flips to `Ready to implement` when its plan PR is approved (§7.3) |
+| — | Title + `**Status:** … · **Ticket:** #NN · **Date:** …` | Status is `Ready to implement`, `Draft — not scheduled`, or `Draft for review`; the ticket link comes from *Resolve the ticket first* when one already exists, otherwise it is added in §6. In async mode the plan is authored as `Draft for review` and flips to `Ready to implement` when its plan PR is approved (§7.3) |
 | — | Lede (2–3 paragraphs, no heading) | The problem in concrete terms, with the evidence: file references, real numbers, the customer-visible symptom. A reader must understand why this exists before reaching §1 |
 | — | Progress log | Empty at authoring time except its standing instruction line |
 | 0 | Open questions | Only if any survived §2 above — the ones deferred to implementation time, plus (in async mode) every question that would have been asked interactively, each with its proposed default. Otherwise omit |
@@ -224,9 +228,17 @@ Milestones are the part an agent works through, so they carry the most weight.
 
 - **M1 … Mn, in dependency order.** Each must be independently committable and leave the app
   releasable — never a state where `main` could not ship.
-- **Each is one subagent's job.** Size it to fit comfortably in one Opus context: roughly
-  3–8 checkboxes over a coherent slice (backend foundation / enforcement / frontend plumbing /
-  one UI surface / rollout). Split anything bigger.
+- **Each is one subagent's job.** Size it to fit comfortably in one subagent's context:
+  roughly 3–8 checkboxes over a coherent slice (backend foundation / enforcement / frontend
+  plumbing / one UI surface / rollout). Split anything bigger.
+- **Escalate a milestone's model only where it earns it.** Implement agents run on the
+  configured `agents.implement_model` (Sonnet by default) — plans are written so the
+  implementer is not redesigning, and the verify pass plus the gates backstop it. A milestone
+  that needs more says so with a `**Model:** session — <reason>` line directly under its
+  heading; `issue-implement` then spawns that milestone's implement agent with no `model`
+  param, so it runs on the session model. Use it for migrations, billing/money paths,
+  concurrency, and anything §6 flags as subtle. Verify agents are never pinned either way.
+  When the configured model is already `session`, leave the line out.
 - **Every box is self-contained and states an end state, not a keystroke sequence**, with
   the reason for any constraint it imposes: name the file, the `path:line` where the code
   lives today, the §4 subsection carrying the design, and the pattern file to copy. A box
@@ -241,30 +253,40 @@ Milestones are the part an agent works through, so they carry the most weight.
   test file whose pattern to follow.
 - Each milestone ends with two lines:
   - `**Verify:** ` — the exact commands. Resolve the repo's configured
-    `conventions.test_command` / `conventions.lint_command` **now**, while writing the plan,
-    and put the resolved, runnable commands into the line — narrowed to the area under change
-    where the command supports it — never the config key names. The implementer must be able
-    to copy the line and run it. Add the manual walkthrough where behaviour is user-visible.
+    `conventions.iterate_command` / `conventions.test_command` / `conventions.lint_command`
+    **now**, while writing the plan, and put the resolved, runnable commands into the line —
+    narrowed to the area under change where the command supports it — never the config key
+    names. The implementer must be able to copy the line and run it. Add the manual
+    walkthrough where behaviour is user-visible. Intermediate milestones need not name the
+    full gate — `issue-implement` runs `conventions.test_command` at every milestone close
+    regardless — but the last code milestone before the PR names it explicitly.
   - `**Done when:** ` — an observable end state, phrased so the verification subagent can
     return true or false on it.
 - **The last milestone is production rollout** and is normally the founder's, not the agent's:
   pre-flight checks against prod, release via the project's configured `deploy.skill` skill
   when one exists (otherwise name the release steps explicitly), flag flips with what to
   verify at each state, and the docs/todo cleanup.
+- **The rollout milestone always ends with the ticket-closure checkbox** (in `template.md`):
+  move the card to **Released** via `issue-update` and archive the plan per
+  `issue-implement` §3. When the rollout is a deploy, the release skill does this and the box
+  just gets ticked; it matters most when the release is *not* a deploy — content published by
+  hand, DNS, vendor steps — because then nothing else triggers the transition and the card
+  strands in Merged.
 - Ops work with lead time (vendor API access, tokens, DNS) goes in an **M0** flagged as a
   founder task, called out early because it blocks later milestones.
 
 ## 5. The implementation protocol pointer
 
 The protocol itself lives in **one place: the `issue-implement` skill** — §0 questions first,
-branch off `main`, per-milestone Opus implement + separate Opus adversarial verify,
+branch off `main`, per-milestone implement agent (on the configured model) + separate
+session-model adversarial verify,
 `/git-commit` + push per milestone, `issue-pr` skill at completion, ticket/board upkeep
 via `issue-update`. Do **not** copy those steps into the plan; the top of §5 carries only the
 short pointer block from `template.md`, with the branch name filled in. Branch names follow
 `<prefix>/<kebab-topic>` with one of the standard prefixes — `feat/` (new capability),
 `fix/` (bug fix), `chore/` (tooling, docs, ops), `refactor/` (behaviour-preserving
 restructure) — where `<kebab-topic>` is usually the plan filename minus `.md` (e.g.
-`fix/feed-fetch-reliability`). Plan-specific process notes (a migration-collision warning, a
+`docs/plans/feed-fetch-reliability.md` → `fix/feed-fetch-reliability`). Plan-specific process notes (a migration-collision warning, a
 "land X first" ordering constraint) do belong there, beneath the pointer.
 
 ## 6. Finishing up
@@ -272,10 +294,12 @@ restructure) — where `<kebab-topic>` is usually the plan filename minus `.md` 
 - Do not implement anything while writing the plan. Authoring and implementing are separate
   sessions; the plan is the handoff.
 - **Settle the ticket, using whatever *Resolve the ticket first* turned up:**
-  - *A ticket already exists* — **do not file another.** Attach the plan to it: add a
-    `**Plan:**` line to the issue body if it has none (linked to `main`, as `issue-create`
-    step 1 shows), add the `plan` label, and move its card to `Ready` (or leave it in `Draft`
-    if the plan is not yet locked) via the `issue-update` skill.
+  - *A ticket already exists* — **do not file another.** Attach the plan to it: fill in
+    the issue body's `**Plan:**` bullet, replacing its `_none yet_` placeholder (or adding
+    the bullet above `**Branch:**` on an older ticket without one), linked to `main` as
+    `issue-create` step 1 shows — edit the body as `issue-update` describes. Add the `plan`
+    label, and move its card to `Ready` (or leave it in `Draft` if the plan is not yet
+    locked) via the `issue-update` skill.
   - *No ticket exists* — file one via the `issue-create` skill: board column `Ready` (or
     `Draft` if not yet locked), type label matching the branch prefix, plus the `plan` label.
 
@@ -376,24 +400,14 @@ once §7.1 has run, any session asked to check on, answer, or finish the plan PR
 §7.3 below, interactive or not.
 
 **The gate presupposes two identities.** The agent account (a dedicated bot user) opens the
-plan PR; the human named in `github.assignee` approves it. GitHub refuses an approving review
-from a PR's own author, so in a single-identity setup — the pipeline running under your own
+plan PR; the configured reviewer (`forge.reviewer`) approves it. A forge may refuse an
+approving review from a PR's own author (GitHub does), so in a single-identity setup — the pipeline running under your own
 login on a laptop, where the author *is* the configured reviewer — a formal approval is
 impossible and waiting for one deadlocks the plan. **In that configuration only**, an explicit
 approving comment from the configured reviewer ("approved", "LGTM — merge it") is the gate;
 say in your report that you took a comment as the approval and why. This is a stopgap until the
 two-account setup exists, not a general relaxation — wherever author and reviewer are different
-accounts, an `APPROVED` review is the only thing that opens the gate.
-
-Read the two config values this needs the same way every other skill does:
-
-```bash
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.repo       # <repo> — owner/name
-${CLAUDE_PLUGIN_ROOT}/skills/issue-update/project-config.sh github.assignee   # <assignee>
-```
-
-Both are required keys — on a non-zero exit, tell the user to add them to
-`.agent/project.yml` rather than guessing a repo or a login.
+accounts, an approving review is the only thing that opens the gate.
 
 ### 7.1 Branch and push the plan
 
@@ -422,8 +436,8 @@ Then commit the plan doc — plus any `docs/todo.md` deletions from §6 — with
 and push. Never commit the plan to `main` directly in this mode; merging the plan PR is
 what puts it there.
 
-**No closing keywords in any commit message on this branch** — no `Closes #NN`, `Fixes #NN` or
-`Resolves #NN`. A squash merge concatenates the branch's commit messages into the merge body by
+**No closing references in any commit message on this branch** — nothing in the form
+`tracker.sh closing-ref` prints (`Closes #NN`, and on GitHub also `Fixes #NN` / `Resolves #NN`). A squash merge concatenates the branch's commit messages into the merge body by
 default, so one such subject would close the ticket the moment the plan merged, for the same
 reason §7.2 bans it in the PR body. §7.3 pins the merge subject and body explicitly as a second
 line of defence.
@@ -455,18 +469,19 @@ shape of the fix. Lead with the user-visible symptom.>
 Approving this PR locks the plan: every ticked default becomes a §2 decision, the plan merges
 to `main`, and the ticket moves to Ready.
 
-Part of #NN
+<tracker.sh mention-ref <id> — e.g. Part of #NN>
 ```
 
 The task-list items are the §0 entries **verbatim** — same wording, same defaults. That is
 what makes ticking a box on a phone an unambiguous answer.
 
-**End the body `Part of #NN`, never `Closes #NN`.** This is the one place the `issue-pr` rule
-inverts, and the reason is board automation: the board's built-in *Item closed* workflow fires
-on the issue closing, so a plan PR merged with a closing keyword would close the ticket and
-slam its card from `Draft` to `Merged` before a single line of the work existed. `Part of #NN`
-cross-references the ticket without closing it. `issue-pr`'s `Closes #NN` rule still holds for
-the **implementation** PR — that one is meant to close the ticket.
+**End the body with `tracker.sh mention-ref <id>` (`Part of #NN`), never the closing ref.**
+This is the one place the `issue-pr` rule inverts, and the reason is board automation: where
+the tracker closes tickets on merge and moves closed cards (`tracker.sh capabilities`;
+GitHub's *Item closed* workflow), a plan PR merged with a closing ref would close the ticket
+and slam its card from `draft` to `merged` before a single line of the work existed. The
+mention ref cross-references the ticket without closing it. `issue-pr`'s closing-ref rule
+still holds for the **implementation** PR — that one is meant to close the ticket.
 
 Everything else follows `issue-pr`'s conventions: one-line title, ≤72 characters, concrete
 over salesmanlike, and no mention of Claude, AI or assistant tooling anywhere in the body —
@@ -476,32 +491,24 @@ rather than `issue-pr`'s imperative, deliberately: this PR names a plan, it does
 a change to the code.
 
 ```bash
-gh pr create -R <repo> \
-  --base main \
-  --title "Plan: <topic>" \
-  --body-file <scratchpad>/plan-pr-body.md \
-  --label plan \
-  --assignee <assignee>
-
-gh pr edit <pr> -R <repo> --add-reviewer <assignee> 2>&1 || true
+${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh open "Plan: <topic>" <scratchpad>/plan-pr-body.md --label plan   # prints "<pr>\t<url>"
 ```
 
-`plan` is the same repo label `issue-create` puts on plan-backed tickets (`bootstrap-board.sh`
+`plan` is the same label `issue-create` puts on plan-backed tickets (`tracker.sh bootstrap`
 creates it); it is what tells a reviewer, and the notification stream, that this PR is a gate
-and not code. As in `issue-pr`, the `--add-reviewer` step fails with "review cannot be
-requested from pull request author" when the configured reviewer opened the PR — that is
-normal, `--assignee` already put it on their list, so note it in a clause and move on.
+and not code. As in `issue-pr`, `open` assigns the configured reviewer and requests their
+review; when they opened the PR themselves the request is reported as skipped — that is
+normal, the assignment already put it on their list, so note it in a clause and move on.
 
-Finally, leave the trail on the ticket (the card is already in `Draft` from §6 — no move):
+Finally, leave the trail on the ticket (the card is already in `draft` from §6 — no move):
 
 ```bash
-gh issue comment <issue#> -R <repo> \
-  --body "Plan up for review on PR #<pr> (branch \`plan/<kebab-topic>\`). Card stays in Draft until it's approved and merged."
+${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh comment <id> "Plan up for review on $(${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh link <pr>) (branch \`plan/<kebab-topic>\`). Card stays in Draft until it's approved and merged."
 ```
 
 ### 7.3 When the plan is approved
 
-Approval means a PR review in the `APPROVED` state — or, in the single-identity configuration
+Approval means an approving PR review — or, in the single-identity configuration
 described at the top of §7, an explicit approving comment from the configured reviewer.
 Otherwise never infer approval from a friendly comment, and never approve or merge on your own
 reading of the thread.
@@ -522,20 +529,19 @@ the remote in a session that has never seen it.
 
 **Then collect the answers — from all three surfaces.** They can arrive as ticked checkboxes in
 the **PR body**, as **conversation comments**, or as **inline review comments** on the plan
-diff (the natural thing to do when reading a diff on a phone). `--json comments` returns
-conversation comments *only*, so the inline review threads need the API call as well:
+diff (the natural thing to do when reading a diff on a phone). One call returns all three —
+the body, the reviews, the conversation comments and the inline review comments:
 
 ```bash
-gh pr view <pr> -R <repo> --json reviewDecision,reviews,body,comments
-gh api "repos/<repo>/pulls/<pr>/comments"     # inline review-thread comments
+${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh feedback <pr>        # JSON: body, reviews, comments, inline
+${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh review-state <pr>    # JSON: approved, changes_requested, latest review per reviewer
 ```
 
 Read all three before transcribing anything. Where a comment and a checkbox disagree, **the
 comment wins** — a ticked box under a comment saying "actually, do B" is answered B.
 
-`reviewDecision` is authoritative whenever it is non-empty: `APPROVED` means approved. It comes
-back null or empty on repos with no branch protection and no requested reviewer — there, fall
-back to the latest review in `reviews` having state `APPROVED`.
+`review-state`'s `approved` is the verdict: true when some reviewer's latest review approves
+and nobody's latest review requests changes.
 
 **An approval with the boxes untouched and no contrary comment accepts every proposed
 default.** That is what writing defaults into the questions is *for*: the reviewer read them
@@ -564,37 +570,34 @@ Then, in this order:
    dismisses the very approval you are acting on, and the merge is refused:
 
    ```bash
-   gh pr view <pr> -R <repo> --json reviewDecision,reviews
+   ${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh review-state <pr>
    ```
 
-   If it no longer reads `APPROVED`, **do not merge**. Comment on the PR saying the only change
+   If `approved` is no longer true, **do not merge**. Comment on the PR saying the only change
    since the approval is the transcription commit, what it contains (the §2 rows, the ticked
    boxes, the status flip — no change to the design), and asking for a re-approval. Then stop
    and report the wait state.
 6. **Merge, only now that the approval still stands:**
 
    ```bash
-   gh pr merge <pr> -R <repo> --squash --delete-branch \
-     --subject "Plan: <topic> (#<pr>)" \
-     --body "Part of #NN"
+   ${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh merge <pr> "Plan: <topic> (#<pr>)" "$(${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh mention-ref <id>)"   # squash, then deletes the branch
    ```
 
    Pin the subject and body explicitly. Left to itself, a squash merge concatenates the
    branch's commit messages into the merge body, so a single commit reading "Fixes #NN" would
-   close the ticket and fire the board's *Item closed* automation — precisely what §7.2's
-   `Part of #NN` exists to prevent.
-7. **Move the card to `Ready`** via the `issue-update` skill, with the transition comment:
+   close the ticket and fire the close-moves-the-card automation — precisely what §7.2's
+   mention ref exists to prevent.
+7. **Move the card to `ready`** via the `issue-update` skill, with the transition comment:
 
    ```bash
-   ${CLAUDE_PLUGIN_ROOT}/skills/issue-update/board.sh status <issue#> "Ready"
-   gh issue comment <issue#> -R <repo> \
-     --body "Plan approved and merged (PR #<pr>). Ready to implement on \`<prefix>/<kebab-topic>\`."
+   ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh set-status <id> ready
+   ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh comment <id> "Plan approved and merged ($(${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh link <pr>)). Ready to implement on \`<prefix>/<kebab-topic>\`."
    ```
 
-8. **Confirm the plan branch is gone.** `--delete-branch` removes it on the remote and, run
-   from a clone, locally too; check with `git branch --list 'plan/*'` and clean up if not.
-   Then `git switch main && git pull` so the implementation branch is later cut from an
-   up-to-date `main`.
+8. **Clean up the plan branch locally.** The merge deleted it on the remote; run
+   `git switch main && git pull && git branch -D plan/<kebab-topic>` so the implementation
+   branch is later cut from an up-to-date `main`, and `git branch --list 'plan/*'` confirms
+   nothing is left.
 
 Implementation is unchanged from there: `issue-implement` picks the ticket up out of `Ready`
 and cuts `<prefix>/<kebab-topic>` off `main`. Its §0 gate still runs, so anything left
@@ -608,16 +611,15 @@ push, and the same approval path applies.
 A plan that is genuinely not going ahead does not merge — close the PR with the reason:
 
 ```bash
-gh pr close <pr> -R <repo> --delete-branch \
-  --comment "<why — the decision that killed it, and the successor ticket if there is one>"
+${CLAUDE_PLUGIN_ROOT}/scripts/forge.sh close <pr> "<why — the decision that killed it, and the successor ticket if there is one>"   # also deletes the branch
 ```
 
 Then follow the `issue-update` skill for the ticket:
 
-- **Shelved for now** — card to `Parked`, comment saying why and what would unpark it, and
-  leave the issue **open**: closing it would bounce the card to Merged.
-- **Superseded** — comment naming the successor ticket, `gh issue close <n> --reason "not
-  planned"`, **then** set the column to `Released`, because the close fires the Merged
-  automation first.
+- **Shelved for now** — card to `parked`, comment saying why and what would unpark it, and
+  leave the ticket **open**: where the tracker moves closed cards, closing it would bounce the
+  card to Merged.
+- **Superseded** — comment naming the successor ticket, `tracker.sh close <id> not-planned`,
+  **then** set the card to `released`, because the close may have moved it first.
 
 The plan doc dies with the branch — it never reached `main`, so there is nothing to archive.
