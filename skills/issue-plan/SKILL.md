@@ -305,6 +305,17 @@ restructure) — where `<kebab-topic>` is usually the plan filename minus `.md` 
 
   Either way, add the `**Ticket:** #NN` link to the plan's `**Status:**` line. The board —
   not any repo file — is the single source of truth for status.
+- **When §7 lists follow-up slices that are tickets in their own right** — a feature the
+  interview deliberately cut into a core plus later plans, not a stray idea — lay the group
+  out for the user before filing anything: each slice as a one-line ticket, with arrows for
+  the hard dependencies (which slice needs another's models or UI merged first), and why the
+  cuts fall where they do. Then ask (`AskUserQuestion`; in async mode a §0 question with the
+  default "file them all") whether to file the slices now as Draft placeholders. On a yes,
+  follow `issue-create`'s *Groups of tickets* convention: `tracker.sh ensure-label
+  <kebab-topic>`, the group label on the core ticket and every placeholder, `Blocked by`
+  lines built with `tracker.sh link`, filed in dependency order, and a comment plus the label
+  on any pre-existing ticket a slice pairs with. The plan's §7 keeps its entries either way —
+  a placeholder ticket carries scope, not design.
   **In async mode the column is always `Draft`** (the plan PR is what locks the plan), and
   the ticket is settled **here, before §7 cuts the branch** — the plan PR body has to
   reference `#NN`, and the plan doc that gets committed should already carry the ticket link.

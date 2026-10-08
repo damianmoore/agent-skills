@@ -210,7 +210,10 @@ error. It parses a deliberately tiny YAML subset (two levels, scalar values, `#`
    Every ticket carries exactly one of the four type labels, matching its branch prefix;
    `plan` is added alongside it when the work has a plan document. `plan/` is the one branch
    prefix that is not a type: it names the branch a plan doc is reviewed on, and the same work
-   is implemented later on its `feat/` / `fix/` / `chore/` / `refactor/` branch.
+   is implemented later on its `feat/` / `fix/` / `chore/` / `refactor/` branch. A feature
+   split into several tickets also shares a **group label** named after its topic
+   (`episode-review`), created on demand by `tracker.sh ensure-label` — see `issue-create`,
+   *Groups of tickets*.
 
 That is the whole setup. From then on `issue-create` / `issue-plan` / `issue-implement` /
 `issue-pr` / `issue-update` work against that repo's board.
@@ -247,6 +250,7 @@ Run either script with no arguments for its verbs. The contract a new adapter im
 | `get-body <id>` / `set-body <id> <file>` | Read / replace the body |
 | `comment <id> [text]` | Add a comment (stdin when text is omitted) |
 | `add-label <id> <label>` / `close <id> <completed\|not-planned>` | |
+| `ensure-label <label> [description]` | Create a label if it is missing (idempotent) — the group label a set of related tickets shares (`issue-create`, *Groups of tickets*) |
 | `url <id>` / `link <id>` | URL / markdown link |
 | `closing-ref <id>` / `mention-ref <id>` | Text for a review-request body that closes the ticket on merge / only references it |
 | `branch <type> <kebab-topic>` | Branch name for the work (Jira-style trackers put the key in it) |

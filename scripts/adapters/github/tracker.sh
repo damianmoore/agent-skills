@@ -10,6 +10,8 @@
 #   set-body <id> <file>                         replace the body
 #   comment <id> [text]                          add a comment (text from stdin when omitted)
 #   add-label <id> <label>
+#   ensure-label <label> [description]           create the label if missing (idempotent); used
+#                                                for a group label shared by related tickets
 #   close <id> <completed|not-planned>
 #   url <id> | link <id>                         URL, or a markdown link "[#42](…)"
 #   closing-ref <id> | mention-ref <id>          text for a review-request body that closes the
@@ -229,6 +231,15 @@ case "$cmd" in
   add-label)
     arg 2 "$@"; gh api -X POST "repos/$REPO/issues/$(num "$1")/labels" -f "labels[]=$2" --silent
     echo "#$(num "$1") labelled $2"
+    ;;
+  ensure-label)
+    # A group label for a set of related tickets (issue-create "Groups of tickets"). Creating
+    # an issue with a missing label hard-fails, so the skills call this before `create`.
+    # --force makes it create-or-update, so a second run only refreshes the description.
+    arg 1 "$@"
+    gh label create "$1" -R "$REPO" --description "${2:-Related tickets: $1}" --color 6366f1 --force \
+      >/dev/null </dev/null || die "could not create label '$1' on $REPO — check write access"
+    echo "label ready on $REPO: $1"
     ;;
   close)
     arg 2 "$@"

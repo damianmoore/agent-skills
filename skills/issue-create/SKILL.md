@@ -56,6 +56,27 @@ them differently, and the closing text is load-bearing.
   implementation branch, so `plan/feed-fetch-reliability` and `fix/feed-fetch-reliability` are
   the same work at two stages. It pairs with the `plan` label, which means "has a plan doc",
   never a work type.
+- **Groups of tickets** — a feature too big for one plan is filed as **several tickets that
+  share one group label**, so the board can filter to the whole set and a reader can see the
+  order. The group label is the feature's `<kebab-topic>` (`episode-review`, never a type
+  word), created once with `tracker.sh ensure-label <kebab-topic> "<one-line description>"`
+  and passed to every `create` in the group as an extra label (alongside the type label and,
+  where there is a plan doc, `plan`). Then:
+  - **One ticket is the core** — the one with a plan, filed first, in `ready` (or `draft` while
+    its plan is under review). Its body ends with a sentence naming the follow-up slices.
+  - **Every other ticket in the group is a Draft placeholder**: a scope paragraph, the three
+    standard bullets with `_none yet_` for the plan, and a **`**Blocked by:**`** line directly
+    above `**State:**` listing the tickets it needs merged first, built with `tracker.sh link`
+    — never a bare number. A ticket that depends on nothing in the group still carries the
+    label; it just has no `Blocked by` line. State reads "Not scoped. Next action: author a
+    plan with the `issue-plan` skill once the blocking ticket has merged."
+  - **File in dependency order**, so each `Blocked by` line can link a ticket that already
+    exists, and read the ids back from `create`'s output rather than predicting them.
+  - **Pre-existing tickets the group touches** (an older ticket a slice pairs with or
+    supersedes) get the group label too, plus one comment naming the dependency — never a
+    body rewrite.
+  - Filing the placeholders is a decision for the person, not the skill: `issue-plan` §6 asks
+    before filing anything beyond the core ticket.
 - **The lifecycle** — the skills move cards by **lifecycle key**; `.agent/project.yml`'s
   `statuses:` section maps each key to the board's own column name, so a board may call
   `in_review` "Code Review", or put `merged` and `released` in one "Done" column (moving
@@ -93,6 +114,8 @@ them differently, and the closing text is load-bearing.
    - **Plan:** [`docs/plans/<file>.md`](<forge.sh file-url docs/plans/<file>.md>)   (_none yet_ if there is no plan doc)
    - **Branch:** [`<branch>`](<forge.sh branch-url <branch>>)
    - **PR:** _none yet_
+
+   **Blocked by:** <tracker.sh link <id>, …>   (only on a ticket in a group that needs others merged first)
 
    **State:** <where things stand and the next action a fresh session can take>
    ```
