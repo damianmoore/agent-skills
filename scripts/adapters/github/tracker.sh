@@ -165,10 +165,28 @@ LABELS
       || echo "could not switch the view layout via API — in the UI: view menu > Layout > Board"
   fi
 
-  local owner_type
+  local owner_type board_url
   owner_type=$(gh api "users/$OWNER" --jq .type 2>/dev/null) || owner_type=User
-  if [ "$owner_type" = "Organization" ]; then echo "Board ready: https://github.com/orgs/$OWNER/projects/$proj_number"
-  else echo "Board ready: https://github.com/users/$OWNER/projects/$proj_number"; fi
+  if [ "$owner_type" = "Organization" ]; then board_url="https://github.com/orgs/$OWNER/projects/$proj_number"
+  else board_url="https://github.com/users/$OWNER/projects/$proj_number"; fi
+
+  # The merge → Merged move rests on the built-in "Item closed" workflow (capabilities:
+  # close_moves_to=merged). The API can read workflows but not enable or configure them, so
+  # check it and leave the switch to the UI.
+  local merged_col closed_enabled
+  merged_col=$(resolve_status merged)
+  closed_enabled=$(gh api graphql -f id="$proj_id" -f query='
+    query($id: ID!) { node(id: $id) { ... on ProjectV2 { workflows(first: 20) { nodes { name enabled } } } } }' \
+    --jq '.data.node.workflows.nodes[] | select(.name == "Item closed") | .enabled' 2>/dev/null)
+  if [ "$closed_enabled" = true ]; then
+    echo "'Item closed' workflow enabled (check it sets $field_name to '$merged_col', not the default 'Done')"
+  else
+    echo "ACTION NEEDED: enable the 'Item closed' workflow in the UI — $board_url/workflows"
+    echo "  > Item closed > Edit: When 'Issue, Pull request', Set value $field_name: '$merged_col' > Save and turn on workflow"
+    echo "  (the API cannot do this; without it a merged PR leaves its ticket's card in the review column)"
+  fi
+
+  echo "Board ready: $board_url"
 }
 
 # ---------- verbs ----------

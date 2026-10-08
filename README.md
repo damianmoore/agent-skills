@@ -190,6 +190,12 @@ error. It parses a deliberately tiny YAML subset (two levels, scalar values, `#`
    for you to add in the UI instead, since rewriting the options would clear every card's
    column. Re-running it is safe.
 
+   One step is UI-only: turn on the board's built-in **Item closed** workflow and point it
+   at Merged (board ⋯ > Workflows > Item closed > Edit > set Status to Merged > Save and turn
+   on workflow). GitHub's API can read workflows but not configure them, so `bootstrap`
+   checks it and prints `ACTION NEEDED` with the link until it is on. Without it, merging a
+   PR closes the issue but leaves its card in In review.
+
    The labels matter — creating an issue with a `feat` label hard-fails on a repo that has no `feat`
    label, so `issue-create` cannot file a ticket until they exist:
 
