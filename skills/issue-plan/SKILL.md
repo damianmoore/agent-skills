@@ -71,6 +71,15 @@ When the match is arguable, ask rather than guess. Filing a second ticket for wo
 already has one splits its history across two cards, and the board is the single source of
 truth for status.
 
+**Folding another ticket in.** When the plan also fixes a second ticket's problem (a twin
+error from the same cause, a smaller ticket the design swallows), the plan still keeps one
+ticket and the other one closes as a duplicate. Ask it in §0 as "Close #B as a duplicate of
+#A and fold its work into this plan?", never as "one PR closing both": that wording leaves
+two open tickets tracking one piece of work. Once the answer is yes, run `issue-update`'s
+*Superseded* row on #B (comment `Folded into #A`, close not-planned, set `released`), give it
+no Branch or PR bullet, and name it in the plan's Decisions rather than on the `**Ticket:**`
+line.
+
 ---
 
 ## Review mode: interactive or plan PR

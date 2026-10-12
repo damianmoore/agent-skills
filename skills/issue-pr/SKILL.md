@@ -156,7 +156,9 @@ Rules for the body:
   for the people maintaining the code, and tooling attribution is noise to them. No
   `Co-Authored-By` or "Generated with" trailers; this applies to PR bodies exactly as it
   does to commit messages.
-- End the body with the ticket's closing reference when the work has a ticket —
+- End the body with the ticket's closing reference — one ticket, one closing ref; a second
+  ticket covering the same work gets closed as folded via `issue-update`, not closed by this
+  PR — when the work has a ticket —
   `tracker.sh closing-ref <id>` prints it (`Closes #42` on GitHub; the plan's `**Status:**`
   line carries the id, and the `issue-update` skill explains how to find it otherwise). It is
   load-bearing where `tracker.sh capabilities` says `closes_on_merge=yes`: merging into

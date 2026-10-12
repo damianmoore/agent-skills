@@ -82,11 +82,13 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh capabilities
 | PR merged | `merged` | with `closes_on_merge=yes` and `close_moves_to=merged` this is **automatic** — merge closes the ticket, the board moves the card. Otherwise close the ticket and/or set `merged` yourself. Either way comment: merge noted, rollout pending and whose it is |
 | Deployed to prod / work complete | `released` | comment: version shipped + outcome; archive the plan doc (see issue-implement §3). The ticket is already closed — don't reopen it |
 | Deliberately shelved | `parked` | comment: why, and what would unpark it; `**State:**` line says the same. Leave the ticket **open** — where `close_moves_to` is set, closing it would bounce the card |
-| Superseded by other work | `released` | comment naming the successor ticket (or saying there is none); `**State:**` line updated to match; `tracker.sh close <id> not-planned`, **then** set `released` — the close may have moved the card first |
+| Superseded by other work, or folded into another ticket's plan | `released` | comment naming the successor ticket (or saying there is none); `**State:**` line updated to match; `tracker.sh close <id> not-planned`, **then** set `released` — the close may have moved the card first. Do it when the fold is decided, not when the PR merges |
 
 Rules:
 
-- **End implementation PR bodies with `tracker.sh closing-ref <id>`** (`Closes #42` on GitHub).
+- **End implementation PR bodies with `tracker.sh closing-ref <id>`** (`Closes #42` on GitHub),
+  for exactly one ticket. A second closing ref means a second ticket is tracking the same
+  work: close it as folded (the *Superseded* row) instead of letting the PR close both.
   Where the tracker closes on merge and moves closed cards, that is what gets the card to
   Merged; without it the card strands in In review. Merged still means "in `main`, rollout
   pending" — the ticket being closed is a board mechanism, not a claim that the work shipped.
