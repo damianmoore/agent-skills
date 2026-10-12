@@ -1,16 +1,38 @@
 ---
 name: browser-handoff
-description: Hand your browser to a human when a page needs credentials you must not invent — a login form, 2FA, an SSO or OAuth consent screen — then take it back and persist the login so no future session hits that wall. Use when browser automation is blocked by authentication, a sign-in redirect, a captcha or any step that only a person can complete, and when someone asks to watch or drive the browser you are using.
+description: Hand your browser to a human when a page needs credentials you must not invent — a login form, 2FA, an SSO or OAuth consent screen — then take it back and persist the login so no future session hits that wall. Use when browser automation is blocked by authentication, a sign-in redirect, a captcha or any step that only a person can complete, and when someone asks to watch or drive the browser you are using. The full protocol is for agent-platform sessions (envctl on PATH); anywhere else it reduces to asking the user in chat.
 ---
 
 # Hand the browser to a human
 
-You drive a **shared** browser: it is not on your machine, and a person can watch it live
+In an agent-platform session you drive a **shared** browser: it is not on your machine, and a person can watch it live
 or take the keyboard, from a phone. This skill is what to do when a page asks for something
 only a human has — and how to make sure the next session never has to ask again.
 
 **Never invent credentials.** Not a plausible test password, not `admin/admin`, not an email
 you made up. A login wall is not a test failure and not a puzzle: it is a handoff.
+
+## First: are you in an agent-platform session?
+
+Everything below assumes a platform session pod — `envctl`, the mission-control viewer, the
+hand-back mailbox and the per-project auth store. Check before relying on any of it:
+
+```bash
+command -v envctl
+```
+
+**No `envctl`** → you are not in one (a local machine, a plain IDE, CI). None of the steps
+below will work there, so do not run them, do not poll for a mailbox file that nothing will
+ever write, and do not post `blocked:` comments. Instead:
+
+1. Stop at the wall and leave the browser on that page.
+2. Tell the user in chat exactly what is needed — the origin and what it is asking for
+   ("login needed for github.com — the browser is waiting on the sign-in page").
+3. Wait for their reply. They may log in themselves if the browser is visible to them, give
+   you credentials to use, or point you at fixture credentials you missed.
+
+The "never invent credentials" rule above applies everywhere. The rest of this skill only
+applies when `envctl` is present.
 
 ## When this applies
 
