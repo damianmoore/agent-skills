@@ -54,6 +54,11 @@ reference is load-bearing and why Released is a separate manual move on an alrea
 issue. The adapter reports these facts (`tracker.sh capabilities`) so the skills can adapt to
 a tracker that behaves differently.
 
+With `tracker.release_field` set, the board also carries a text field holding the version a
+ticket's code went live in. The deploy step sets it at rollout, before any post-deploy
+checks, so it is independent of the Released column: a card can sit in Merged with a version
+already recorded.
+
 Requirements for the GitHub adapters: `gh` (authenticated, with the `project` scope — `gh
 auth refresh -s project,read:project`), `jq`, and `bash` 4+.
 
@@ -138,6 +143,7 @@ deploy:
 | `forge.repo` | yes (github) | GitHub forge | `owner/name` of the code repo |
 | `forge.reviewer` | no | GitHub forge | Login that PRs are assigned to and asked to review |
 | `forge.base_branch` | no | GitHub forge | Branch review requests target (default `main`) |
+| `tracker.release_field` | no | GitHub tracker | Name of a board text field recording the version a ticket's code went live in (e.g. `Shipped in`); `tracker.sh bootstrap` creates it if absent. Unset means `set-release` is a reported no-op |
 | `statuses.<key>` | no | all skills | Board column for a lifecycle key (`draft` … `parked`); unset keys use the default names |
 | `conventions.lint_command` | no | `issue-implement` | Run first on each milestone handoff; `<files>` in it is filled with the touched files, otherwise the command defines its own scope |
 | `conventions.iterate_command` | no | `issue-plan`, `issue-implement` | Fast, targeted tests for implement agents and fix rounds; `<path>` is filled with the file or directory under test. Omitted means the test command is scoped as narrowly as its runner allows |
@@ -260,9 +266,10 @@ Run either script with no arguments for its verbs. The contract a new adapter im
 | `url <id>` / `link <id>` | URL / markdown link |
 | `closing-ref <id>` / `mention-ref <id>` | Text for a review-request body that closes the ticket on merge / only references it |
 | `branch <type> <kebab-topic>` | Branch name for the work (Jira-style trackers put the key in it) |
-| `capabilities` | `closes_on_merge=yes\|no`, `close_moves_to=<key or empty>`, `labels=yes\|no`, `ticket_noun=…` |
+| `capabilities` | `closes_on_merge=yes\|no`, `close_moves_to=<key or empty>`, `labels=yes\|no`, `release_field=yes\|no`, `ticket_noun=…` |
 | `add <id>` / `status <id>` / `set-status <id> <key>` / `list <key>` | Board: add a card; print `<key>\t<column>`; move (accepting a key or a column name); list `<ref>\t<title>` |
-| `bootstrap` | Create or check the board, columns and labels; where that is an admin job, report what is missing |
+| `set-release <id> <version>` / `release <id>` | Set / read the ticket's release field (`tracker.release_field`): the version its code went live in. `set-release` adds the card if needed, overwrites any value, rejects anything but a dotted version, and is a reported no-op (exit 0) when the key is unset; `release` prints the value or nothing |
+| `bootstrap` | Create or check the board, columns and labels (and the release text field, when configured; a same-named field of another type is reported, not replaced); where that is an admin job, report what is missing |
 
 | `forge.sh` verb | Contract |
 |-----------------|----------|

@@ -13,6 +13,9 @@
 # agent-skills README (Per-repo configuration) or examples/project.yml. Sections in use:
 # tracker, forge, statuses, conventions, agents, plans, pr, deploy — plus the legacy github
 # section, read as a fallback for tracker/forge keys (scripts/lib.sh `cfg`).
+# Optional tracker.release_field names a board text field that tracker.sh set-release /
+# release use to record the release a ticket's code went live in; unset, set-release is a
+# reported no-op.
 #
 # Supported YAML subset — deliberately tiny, so the dependencies stay bash + awk (plus jq
 # and gh for the board scripts):

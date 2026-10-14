@@ -80,6 +80,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh capabilities
 | Branch cut, implementation starts | `in_progress` | comment: branch name, e.g. `Implementation started on \`fix/feed-fetch-reliability\`.` |
 | Implementation PR opened | `in_review` | comment: PR link + what remains (e.g. rollout milestone); ticket body's `**PR:**` bullet filled in; PR body ends with the closing ref (issue-pr does all three). A plan PR never matches this row — it has its own row above, and leaves the card in `draft` |
 | PR merged | `merged` | with `closes_on_merge=yes` and `close_moves_to=merged` this is **automatic** — merge closes the ticket, the board moves the card. Otherwise close the ticket and/or set `merged` yourself. Either way comment: merge noted, rollout pending and whose it is |
+| Code deployed to prod (checks may still be pending) | **no move** | `tracker.sh set-release <id> <version>` — the version the code went live in, set at rollout time and never moved to a later release; where `capabilities` says `release_field=no`, the deploy comment is the only record |
 | Deployed to prod / work complete | `released` | comment: version shipped + outcome; archive the plan doc (see issue-implement §3). The ticket is already closed — don't reopen it |
 | Deliberately shelved | `parked` | comment: why, and what would unpark it; `**State:**` line says the same. Leave the ticket **open** — where `close_moves_to` is set, closing it would bounce the card |
 | Superseded by other work, or folded into another ticket's plan | `released` | comment naming the successor ticket (or saying there is none); `**State:**` line updated to match; `tracker.sh close <id> not-planned`, **then** set `released` — the close may have moved the card first. Do it when the fold is decided, not when the PR merges |
@@ -112,6 +113,11 @@ Rules:
 - **Two stages may share a column** (`statuses:` maps `merged` and `released` to one "Done",
   say). Moving between them is a no-op on the board, so the transition comment is the only
   record — never skip it.
+- **A Merged card can carry a release version.** The release field (`tracker.release_field`)
+  records the version the code went live in (e.g. `0.1.392`), set at rollout time;
+  `tracker.sh release <id>` reads it back, and an unset key makes `set-release` a reported
+  no-op. It is independent of the column: Released still means the rollout work is
+  confirmed, and a ticket that ships again keeps its first version.
 - **Milestone-by-milestone detail stays in the plan's Progress log**, not the ticket. The
   ticket gets one comment per *transition*, written for someone reading the board — what
   changed, where it stands, the next action.
