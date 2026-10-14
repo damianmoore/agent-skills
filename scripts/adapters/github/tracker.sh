@@ -23,10 +23,16 @@
 #   status <id>                                  "<lifecycle-key>\t<column>"
 #   set-status <id> <key-or-column>              move the card (adds it first if needed)
 #   list <key-or-column>                         "<ref>\t<title>" for the cards in a column
-#   bootstrap                                    create/repair the board, columns and labels
+#   set-release <id> <version>                   record the release the code went live in, in the board's
+#                                                text field tracker.release_field (adds the card first if
+#                                                needed; overwrites; a no-op when the key is unset)
+#   release <id>                                 print that field's value, or nothing
+#   bootstrap                                    create/repair the board, columns, labels and (when
+#                                                tracker.release_field is set) the release text field
 #
 # Config (.agent/project.yml): tracker.repo, tracker.board_owner, tracker.board_title —
-# falling back to the legacy github.repo / github.owner / github.project_title.
+# falling back to the legacy github.repo / github.owner / github.project_title — and the
+# optional tracker.release_field (name of the board's text field holding a ticket's release).
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/lib.sh"
 
 usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0" | sed '/^Config/,$d'; exit 2; }
@@ -36,6 +42,7 @@ cmd=$1; shift
 REPO=$(cfg_req tracker.repo github.repo)
 OWNER=$(cfg "${REPO%%/*}" tracker.board_owner github.owner)
 TITLE=$(cfg "" tracker.board_title github.project_title)
+RELEASE_FIELD=$(cfg "" tracker.release_field)
 
 num() { local n=${1#\#}; [[ $n =~ ^[0-9]+$ ]] || die "expected an issue number, got '$1'"; echo "$n"; }
 arg() { [ $# -ge "$1" ] || die "usage: $cmd — run with no arguments for the verbs"; }
@@ -82,6 +89,19 @@ card_for() {
       } } } } }' \
     --jq ".data.repository.issue.projectItems.nodes[] | select(.project.id == \"$proj_id\")
           | [.id, (.fieldValueByName.name // \"\")] | @tsv" | head -1
+}
+
+# The release field's value on this issue's card on our board, or nothing. Same query shape as
+# card_for, but reading the text field named by tracker.release_field.
+release_for() {
+  gh api graphql -F n="$1" -f o="${REPO%%/*}" -f r="${REPO#*/}" -f f="$RELEASE_FIELD" -f query='
+    query($o: String!, $r: String!, $n: Int!, $f: String!) {
+      repository(owner: $o, name: $r) { issue(number: $n) { projectItems(first: 50) { nodes {
+        project { id }
+        fieldValueByName(name: $f) { ... on ProjectV2ItemFieldTextValue { text } }
+      } } } } }' \
+    --jq ".data.repository.issue.projectItems.nodes[] | select(.project.id == \"$proj_id\")
+          | .fieldValueByName.text // empty" | head -1
 }
 
 add_card() {
@@ -152,6 +172,21 @@ LABELS
     fi
   else
     echo "board is missing columns: $missing — add them in the board UI (not rewritten automatically: that would clear every card's column)"
+  fi
+
+  # The release field, only for repos that opt in. A text field, not single-select: a new
+  # option per release would be upkeep. Existing fields are left alone (idempotent).
+  if [ -n "$RELEASE_FIELD" ]; then
+    if jq -e --arg f "$RELEASE_FIELD" 'any(.fields[]; .name == $f and .type != "ProjectV2Field")' <<<"$fields" >/dev/null; then
+      # field-list reports only the class, so this catches single-select/iteration fields
+      # (e.g. release_field set to "Status"), not a number or date field of the same name.
+      echo "field '$RELEASE_FIELD' exists but is not a text field — set tracker.release_field to an unused name"
+    elif jq -e --arg f "$RELEASE_FIELD" 'any(.fields[]; .name == $f)' <<<"$fields" >/dev/null; then
+      echo "field '$RELEASE_FIELD' ready"
+    else
+      gh project field-create "$proj_number" --owner "$OWNER" --name "$RELEASE_FIELD" --data-type TEXT >/dev/null
+      echo "created field '$RELEASE_FIELD'"
+    fi
   fi
 
   # Make the default view an actual kanban board (it starts as a table).
@@ -258,7 +293,9 @@ case "$cmd" in
     # close_moves_to — the board's built-in "Item closed" workflow moves ANY closed ticket's card
     #   to this lifecycle stage, unconditionally; after a non-merge close, set the column again.
     # labels — tickets carry type labels.
-    printf '%s\n' "closes_on_merge=yes" "close_moves_to=merged" "labels=yes" "ticket_noun=issue"
+    # release_field — set-release/release record a ticket's release on the board (tracker.release_field).
+    printf '%s\n' "closes_on_merge=yes" "close_moves_to=merged" "labels=yes" "ticket_noun=issue" \
+      "release_field=$([ -n "$RELEASE_FIELD" ] && echo yes || echo no)"
     ;;
   add)
     arg 1 "$@"; n=$(num "$1"); board_init; board_fields; add_card "$n" >/dev/null
@@ -295,6 +332,24 @@ case "$cmd" in
       | jq -r --arg f "$field_name" --arg c "$col" \
         '.items[] | select((.[$f | ascii_downcase] // .status) == $c)
          | "#\(.content.number // "?")\t\(.content.title // .title)"'
+    ;;
+  set-release)
+    arg 2 "$@"; n=$(num "$1")
+    [[ $2 =~ ^[0-9]+(\.[0-9]+)*$ ]] || die "expected a version like 0.1.392, got '$2'"
+    if [ -z "$RELEASE_FIELD" ]; then echo "no tracker.release_field configured — skipped"; exit 0; fi
+    board_init; board_fields
+    release_id=$(jq -r --arg f "$RELEASE_FIELD" '.fields[] | select(.name == $f) | .id' <<<"$fields")
+    [ -n "$release_id" ] || die "board '$TITLE' has no field '$RELEASE_FIELD' — run: tracker.sh bootstrap"
+    item_id=$(add_card "$n")
+    gh project item-edit --id "$item_id" --project-id "$proj_id" \
+      --field-id "$release_id" --text "$2" >/dev/null
+    echo "#$n shipped in $2"
+    ;;
+  release)
+    arg 1 "$@"; n=$(num "$1")
+    [ -n "$RELEASE_FIELD" ] || exit 0
+    board_init
+    release_for "$n"
     ;;
   bootstrap) bootstrap ;;
   *) die "unknown verb '$cmd' — run with no arguments for the verbs" ;;
