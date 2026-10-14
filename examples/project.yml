@@ -9,6 +9,7 @@ tracker:
   repo: damianmoore/audio-audit     # required (github) — owner/name of the repo the issues live in
   board_owner: damianmoore          # optional (github) — Projects v2 board owner; default: the repo's owner
   board_title: "Audio Audit"        # required (github) — board title (created by `tracker.sh bootstrap`)
+  # release_field: "Shipped in"    # optional — board text field recording the version a ticket's code went live in (created by `tracker.sh bootstrap`)
 
 forge:
   type: github                      # optional — adapter for review requests (default github)
