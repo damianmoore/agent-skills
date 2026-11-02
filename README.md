@@ -59,6 +59,36 @@ ticket's code went live in. The deploy step sets it at rollout, before any post-
 checks, so it is independent of the Released column: a card can sit in Merged with a version
 already recorded.
 
+### Scoring: Priority, Score, Blast radius
+
+With `scoring.skill` set, the board also carries four fields that rank the backlog:
+**Priority** (single select P0–P3), **Score** (number), **Blast radius** (single select
+Critical / Wide / Limited / Contained) and **Score basis** (text: the inputs, a one-line
+reason and the date). `tracker.sh bootstrap` creates them. The skill named by
+`scoring.skill` does the judging (what each tier means, how to score one ticket or a whole
+board) against the repo's own rubric file (`scoring.rubric`). This plugin holds only the
+arithmetic and the storage, so a score comes out the same from any session or headless job.
+`issue-create`, `issue-plan` and `issue-implement` use the scores when the key is set and
+skip all of this when it isn't.
+
+`tracker.sh set-score <id> <R> <I> <C> <E> <radius> <reason>` takes tiers and computes the
+rest (`scripts/lib.sh`, `score_compute`):
+
+| Input | Accepts | Value used |
+|-------|---------|------------|
+| Reach R | tier 1–5 | 1, 2, 4, 8, 16 |
+| Impact I | 3, 2, 1, 0.5, 0.25 | as given |
+| Confidence C | 100, 80, 50 | percent |
+| Effort E | tier 1–5 | 0.5, 1, 2, 4, 8 |
+| Radius | critical, wide, limited, contained | stored as the option |
+
+Score = R × I × C/100 ÷ E, to one decimal. Priority is P1 at a score of 10 or more, P2 at 2
+or more, otherwise P3. On a `fix` ticket the radius sets a floor, since it describes harm
+happening now: Critical gives P0, and Wide at least P1. On other types the radius describes
+change risk and leaves the priority alone. A ticket whose Score basis starts with `Pinned`
+is the person's own call, and `set-score` leaves it unchanged. `score-preview` prints what
+`set-score` would store without writing; it needs no adapter.
+
 Requirements for the GitHub adapters: `gh` (authenticated, with the `project` scope — `gh
 auth refresh -s project,read:project`), `jq`, and `bash` 4+.
 
@@ -131,6 +161,9 @@ pr:
   api_snapshots: "docs/api/openapi-v1.json"          # optional
 deploy:
   skill: deploy-production          # optional project-specific skill name
+scoring:
+  skill: issue-score                # optional — skill that scores tickets; adds the scoring fields
+  rubric: docs/agents/prioritisation.md   # optional — the project's scoring rubric
 ```
 
 | Key | Required | Used by | Meaning |
@@ -144,6 +177,8 @@ deploy:
 | `forge.reviewer` | no | GitHub forge | Login that PRs are assigned to and asked to review |
 | `forge.base_branch` | no | GitHub forge | Branch review requests target (default `main`) |
 | `tracker.release_field` | no | GitHub tracker | Name of a board text field recording the version a ticket's code went live in (e.g. `Shipped in`); `tracker.sh bootstrap` creates it if absent. Unset means `set-release` is a reported no-op |
+| `scoring.skill` | no | GitHub tracker, `issue-create`, `issue-plan`, `issue-implement` | Name of the skill that scores tickets (e.g. `issue-score`); turns on the four scoring fields and `set-score` (see *Scoring*). Unset means `set-score` is a reported no-op and the skills don't score |
+| `scoring.rubric` | no | the scoring skill | Repo path of the project's scoring rubric: the goal Impact is measured against, what each reach tier means here, high-radius code areas, anchor tickets |
 | `statuses.<key>` | no | all skills | Board column for a lifecycle key (`draft` … `parked`); unset keys use the default names |
 | `conventions.lint_command` | no | `issue-implement` | Run first on each milestone handoff; `<files>` in it is filled with the touched files, otherwise the command defines its own scope |
 | `conventions.iterate_command` | no | `issue-plan`, `issue-implement` | Fast, targeted tests for implement agents and fix rounds; `<path>` is filled with the file or directory under test. Omitted means the test command is scoped as narrowly as its runner allows |
@@ -266,10 +301,12 @@ Run either script with no arguments for its verbs. The contract a new adapter im
 | `url <id>` / `link <id>` | URL / markdown link |
 | `closing-ref <id>` / `mention-ref <id>` | Text for a review-request body that closes the ticket on merge / only references it |
 | `branch <type> <kebab-topic>` | Branch name for the work (Jira-style trackers put the key in it) |
-| `capabilities` | `closes_on_merge=yes\|no`, `close_moves_to=<key or empty>`, `labels=yes\|no`, `release_field=yes\|no`, `ticket_noun=…` |
+| `capabilities` | `closes_on_merge=yes\|no`, `close_moves_to=<key or empty>`, `labels=yes\|no`, `release_field=yes\|no`, `scoring=yes\|no`, `ticket_noun=…` |
 | `add <id>` / `status <id>` / `set-status <id> <key>` / `list <key>` | Board: add a card; print `<key>\t<column>`; move (accepting a key or a column name); list `<ref>\t<title>` |
 | `set-release <id> <version>` / `release <id>` | Set / read the ticket's release field (`tracker.release_field`): the version its code went live in. `set-release` adds the card if needed, overwrites any value, rejects anything but a dotted version, and is a reported no-op (exit 0) when the key is unset; `release` prints the value or nothing |
-| `bootstrap` | Create or check the board, columns and labels (and the release text field, when configured; a same-named field of another type is reported, not replaced); where that is an admin job, report what is missing |
+| `write-score <id> <P0-P3> <score> <radius> <basis>` | Store a computed score in the four scoring fields, adding the card if needed. Called by the shared `set-score` (which computes the values and respects pins), not by skills |
+| `score <id>` / `scores [key…]` | Print `<priority>\t<score>\t<radius>\t<basis>` for one card, or nothing; list `#n\t<key>\t<type>\t<priority>\t<score>\t<radius>\t<title>` for every card, or those in the given columns |
+| `bootstrap` | Create or check the board, columns and labels (and the release text field and scoring fields, when configured; a same-named field of another type is reported, not replaced); where that is an admin job, report what is missing |
 
 | `forge.sh` verb | Contract |
 |-----------------|----------|
@@ -283,8 +320,8 @@ Run either script with no arguments for its verbs. The contract a new adapter im
 | `url <n>` / `link <n>` / `file-url <path> [ref]` / `branch-url <branch>` | Links |
 | `noun` | What the forge calls a review request (`PR`, `MR`) |
 
-`statuses` (the key → column map) is answered by `tracker.sh` itself from the config, so every
-adapter gets it for free, and `lib.sh`'s `resolve_status` turns a key or a column name into the
+`statuses` (the key → column map), `score-preview` and the computing half of `set-score` are
+answered by `tracker.sh` itself, so every adapter gets them for free, and `lib.sh`'s `resolve_status` turns a key or a column name into the
 configured column.
 
 **Adding a backend** means one new directory under `scripts/adapters/` implementing the verbs

@@ -24,6 +24,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.test_notes ""
 ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh agents.implement_model sonnet
 ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh pr.screenshots_guide ""
 ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh deploy.skill ""
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh scoring.skill ""
 ```
 
 The trailing argument is a default — those keys are optional and an empty result means "the
@@ -152,6 +153,15 @@ For each milestone:
        **earlier** milestone still sitting unpushed in that range is a defect to report.
      - **Lens C — test adequacy** (when the milestone adds or changes tests): would the new
        tests fail if the feature broke; are the plan's named cases actually covered.
+     - **Lens D — failure modes** (when the ticket's Blast radius is Critical or Wide, or
+       the diff touches money, data migrations, auth or shared core paths): what happens on
+       partial failure, retry or a duplicate delivery; whether money, credits or data stay
+       consistent; whether a migration is safe on live rows while the old code is still
+       running; whether the change can be backed out. Read the radius once per run from
+       `tracker.sh score <id>` when `scoring.skill` is set. The diff test applies either
+       way: on a `fix` ticket the field records the harm the bug does now, which can be
+       narrower than the risk of the fix. These are the changes whose defects reach every
+       user or can't be undone, so they get a reviewer whose only job is looking for that.
 
      Every lens reports defects only — no fixing, no rubber-stamping — and only gaps that
      affect correctness or the plan's stated requirements: a reviewer asked to find gaps

@@ -40,3 +40,7 @@ pr:
 
 deploy:
   skill: deploy-production          # optional — project-specific release skill in .claude/skills/
+
+scoring:
+  skill: issue-score                # optional — skill that scores tickets (RICE + blast radius); bootstrap adds the Priority, Score, Blast radius and Score basis board fields
+  rubric: docs/agents/prioritisation.md   # optional — the project's rubric: Impact's goal, reach tiers, high-radius areas, anchor tickets

@@ -159,16 +159,23 @@ them differently, and the closing text is load-bearing.
    re-auth. If the board doesn't exist yet, run `${CLAUDE_PLUGIN_ROOT}/scripts/tracker.sh
    bootstrap` first.
 
-3. **Cross-reference the plan.** If a plan doc exists, its `**Status:**` header line gains a
+3. **Score it, when the repo scores tickets.** If `project-config.sh scoring.skill ""` names
+   a skill, load it and score the new ticket as it describes (one `tracker.sh set-score`
+   call). Don't ask first; the person adjusts or pins scores on the board. A failure here
+   (rate limit, fields not bootstrapped) doesn't undo the ticket: report the score as
+   pending. Skip this step when the key is unset.
+
+4. **Cross-reference the plan.** If a plan doc exists, its `**Status:**` header line gains a
    ticket link (`tracker.sh link <id>`): `**Status:** Ready to implement · **Ticket:** [#NN](…) · **Date:** …`.
 
-4. **Sweep `docs/todo.md`, if the repo keeps one.** Delete any lines the new ticket covers —
+5. **Sweep `docs/todo.md`, if the repo keeps one.** Delete any lines the new ticket covers —
    per the note at the top of that file, `todo.md` holds only unplanned work, and the item is
    now tracked on the board (in any column). `issue-plan` and `issue-implement` repeat this
    sweep, but don't rely on them: a ticket filed directly (e.g. a bug) may never pass through
    those skills. Skip the step in repos with no such file.
 
-5. Report the ticket id and URL, noting any `todo.md` lines removed. All later state changes
+6. Report the ticket id and URL, its priority and blast radius when it was scored, and any
+   `todo.md` lines removed. All later state changes
    go through the `issue-update` skill — never edit status prose into repo files: it goes
    stale on every branch that does not carry the edit, which is how README status tables end
    up conflicting between branches.

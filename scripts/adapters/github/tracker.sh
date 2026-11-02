@@ -27,12 +27,22 @@
 #                                                text field tracker.release_field (adds the card first if
 #                                                needed; overwrites; a no-op when the key is unset)
 #   release <id>                                 print that field's value, or nothing
+#   write-score <id> <P0-P3> <score> <radius> <basis>
+#                                                store a computed score in the four scoring fields (one
+#                                                mutation; adds the card first). Callers use the shared
+#                                                `set-score`, which computes these and respects pins
+#   score <id>                                   "<priority>\t<score>\t<radius>\t<basis>", or nothing
+#   scores [key...]                              "#<n>\t<key>\t<type>\t<priority>\t<score>\t<radius>\t<title>"
+#                                                for every card (or the cards in those columns)
 #   bootstrap                                    create/repair the board, columns, labels and (when
-#                                                tracker.release_field is set) the release text field
+#                                                tracker.release_field / scoring.skill are set) the
+#                                                release text field and the four scoring fields
 #
 # Config (.agent/project.yml): tracker.repo, tracker.board_owner, tracker.board_title —
 # falling back to the legacy github.repo / github.owner / github.project_title — and the
 # optional tracker.release_field (name of the board's text field holding a ticket's release).
+# Setting scoring.skill turns on the scoring fields, whose names are fixed: Priority and Blast
+# radius (single-select), Score (number), Score basis (text).
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/lib.sh"
 
 usage() { awk 'NR == 1 { next } /^#/ { sub(/^# ?/, ""); print; next } { exit }' "$0" | sed '/^Config/,$d'; exit 2; }
@@ -43,6 +53,7 @@ REPO=$(cfg_req tracker.repo github.repo)
 OWNER=$(cfg "${REPO%%/*}" tracker.board_owner github.owner)
 TITLE=$(cfg "" tracker.board_title github.project_title)
 RELEASE_FIELD=$(cfg "" tracker.release_field)
+SCORING=$(cfg "" scoring.skill)
 
 num() { local n=${1#\#}; [[ $n =~ ^[0-9]+$ ]] || die "expected an issue number, got '$1'"; echo "$n"; }
 arg() { [ $# -ge "$1" ] || die "usage: $cmd — run with no arguments for the verbs"; }
@@ -113,6 +124,64 @@ add_card() {
     --url "https://github.com/$REPO/issues/$1" --format json | jq -r '.id // empty')
   [ -n "$id" ] || die "failed to add issue #$1 to the board"
   echo "$id"
+}
+
+# ---------- scoring fields ----------
+# "name|data type|options" — options are "Name:COLOR:description" separated by ";".
+SCORE_FIELD_SPECS=(
+  "Priority|SINGLE_SELECT|P0:RED:Drop everything - live critical harm (money, data, security, outage);P1:ORANGE:Next up;P2:YELLOW:Worth doing once the P1s are clear;P3:GRAY:Low value for the effort - park or batch"
+  "Score|NUMBER|"
+  "Blast radius|SINGLE_SELECT|Critical:RED:Money, data, security or the whole service;Wide:ORANGE:A core flow for many users, or shared core code;Limited:BLUE:One feature or workflow, or a few users;Contained:GRAY:Cosmetic, internal, or trivially undone"
+  "Score basis|TEXT|"
+)
+
+ensure_score_fields() {
+  local spec name type opts json kind
+  for spec in "${SCORE_FIELD_SPECS[@]}"; do
+    IFS='|' read -r name type opts <<<"$spec"
+    kind=$(jq -r --arg f "$name" '.fields[] | select(.name == $f) | .type' <<<"$fields" | head -1)
+    if [ -n "$kind" ]; then
+      # field-list reports only the class: single-select fields are distinguishable, while text
+      # and number fields both read ProjectV2Field.
+      if { [ "$type" = SINGLE_SELECT ] && [ "$kind" != ProjectV2SingleSelectField ]; } \
+        || { [ "$type" != SINGLE_SELECT ] && [ "$kind" != ProjectV2Field ]; }; then
+        echo "field '$name' exists but is not a ${type,,} field — rename it on the board, then re-run bootstrap"
+      else
+        echo "field '$name' ready"
+      fi
+      continue
+    fi
+    if [ "$type" = SINGLE_SELECT ]; then
+      json=$(tr ';' '\n' <<<"$opts" | jq -Rn '[inputs | split(":") | {name: .[0], color: .[1], description: (.[2:] | join(":"))}]')
+      gh api graphql --input - >/dev/null <<<"$(jq -n --arg p "$proj_id" --arg n "$name" --argjson o "$json" '{
+        query: "mutation($p: ID!, $n: String!, $o: [ProjectV2SingleSelectFieldOptionInput!]) { createProjectV2Field(input: {projectId: $p, dataType: SINGLE_SELECT, name: $n, singleSelectOptions: $o}) { projectV2Field { ... on ProjectV2SingleSelectField { id } } } }",
+        variables: {p: $p, n: $n, o: $o}}')"
+    else
+      gh project field-create "$proj_number" --owner "$OWNER" --name "$name" --data-type "$type" >/dev/null
+    fi
+    echo "created field '$name'"
+  done
+}
+
+score_field_id() { jq -r --arg f "$1" '.fields[] | select(.name == $f) | .id' <<<"$fields" | head -1; }
+score_option_id() {
+  jq -r --arg f "$1" --arg o "$2" '.fields[] | select(.name == $f) | .options[]? | select(.name == $o) | .id' <<<"$fields" | head -1
+}
+
+# "<priority>\t<score>\t<radius>\t<basis>" from this issue's card on our board, or nothing.
+score_for() {
+  gh api graphql -F n="$1" -f o="${REPO%%/*}" -f r="${REPO#*/}" -f query='
+    query($o: String!, $r: String!, $n: Int!) {
+      repository(owner: $o, name: $r) { issue(number: $n) { projectItems(first: 50) { nodes {
+        project { id }
+        p: fieldValueByName(name: "Priority") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
+        s: fieldValueByName(name: "Score") { ... on ProjectV2ItemFieldNumberValue { number } }
+        b: fieldValueByName(name: "Blast radius") { ... on ProjectV2ItemFieldSingleSelectValue { name } }
+        t: fieldValueByName(name: "Score basis") { ... on ProjectV2ItemFieldTextValue { text } }
+      } } } } }' \
+    --jq ".data.repository.issue.projectItems.nodes[] | select(.project.id == \"$proj_id\")
+          | select(.p.name or .s.number or .b.name or .t.text)
+          | [(.p.name // \"\"), (.s.number // \"\" | tostring), (.b.name // \"\"), (.t.text // \"\")] | @tsv" | head -1
 }
 
 bootstrap() {
@@ -187,6 +256,12 @@ LABELS
       gh project field-create "$proj_number" --owner "$OWNER" --name "$RELEASE_FIELD" --data-type TEXT >/dev/null
       echo "created field '$RELEASE_FIELD'"
     fi
+  fi
+
+  # The scoring fields, only for repos that opt in (scoring.skill). Existing fields are left alone.
+  if [ -n "$SCORING" ]; then
+    ensure_score_fields
+    echo "To use them: a view menu > Sort by Priority (or a table view sorted by Score); filter with priority:P0,P1, and no:priority for unscored cards"
   fi
 
   # Make the default view an actual kanban board (it starts as a table).
@@ -294,8 +369,10 @@ case "$cmd" in
     #   to this lifecycle stage, unconditionally; after a non-merge close, set the column again.
     # labels — tickets carry type labels.
     # release_field — set-release/release record a ticket's release on the board (tracker.release_field).
+    # scoring — set-score/score/scores keep Priority, Score, Blast radius and Score basis on the board.
     printf '%s\n' "closes_on_merge=yes" "close_moves_to=merged" "labels=yes" "ticket_noun=issue" \
-      "release_field=$([ -n "$RELEASE_FIELD" ] && echo yes || echo no)"
+      "release_field=$([ -n "$RELEASE_FIELD" ] && echo yes || echo no)" \
+      "scoring=$([ -n "$SCORING" ] && echo yes || echo no)"
     ;;
   add)
     arg 1 "$@"; n=$(num "$1"); board_init; board_fields; add_card "$n" >/dev/null
@@ -350,6 +427,50 @@ case "$cmd" in
     [ -n "$RELEASE_FIELD" ] || exit 0
     board_init
     release_for "$n"
+    ;;
+  write-score)
+    arg 5 "$@"; n=$(num "$1")
+    [ -n "$SCORING" ] || { echo "no scoring.skill configured — skipped"; exit 0; }
+    [[ $3 =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "score must be a number, got '$3'"
+    board_init; board_fields
+    pf=$(score_field_id Priority) sf=$(score_field_id Score) bf=$(score_field_id "Blast radius") tf=$(score_field_id "Score basis")
+    po=$(score_option_id Priority "$2") bo=$(score_option_id "Blast radius" "$4")
+    [ -n "$pf" ] && [ -n "$sf" ] && [ -n "$bf" ] && [ -n "$tf" ] \
+      || die "board '$TITLE' lacks a scoring field (Priority, Score, Blast radius, Score basis) — run: tracker.sh bootstrap"
+    [ -n "$po" ] || die "field Priority has no option '$2'"
+    [ -n "$bo" ] || die "field Blast radius has no option '$4'"
+    item_id=$(add_card "$n")
+    # One request for all four fields: a whole-board run costs one mutation per card.
+    gh api graphql --input - >/dev/null <<<"$(jq -n --arg p "$proj_id" --arg i "$item_id" \
+      --arg pf "$pf" --arg po "$po" --arg sf "$sf" --argjson s "$3" --arg bf "$bf" --arg bo "$bo" \
+      --arg tf "$tf" --arg t "$5" '{
+      query: "mutation($p: ID!, $i: ID!, $pf: ID!, $po: String!, $sf: ID!, $s: Float!, $bf: ID!, $bo: String!, $tf: ID!, $t: String!) {
+        a: updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $pf, value: {singleSelectOptionId: $po}}) { clientMutationId }
+        b: updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $sf, value: {number: $s}}) { clientMutationId }
+        c: updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $bf, value: {singleSelectOptionId: $bo}}) { clientMutationId }
+        d: updateProjectV2ItemFieldValue(input: {projectId: $p, itemId: $i, fieldId: $tf, value: {text: $t}}) { clientMutationId } }",
+      variables: {p: $p, i: $i, pf: $pf, po: $po, sf: $sf, s: $s, bf: $bf, bo: $bo, tf: $tf, t: $t}}')"
+    echo "#$n scored $2 ($3, blast radius $4)"
+    ;;
+  score)
+    arg 1 "$@"; n=$(num "$1")
+    [ -n "$SCORING" ] || exit 0
+    board_init
+    score_for "$n"
+    ;;
+  scores)
+    board_init; board_fields
+    keys_json=$(print_statuses | jq -Rn '[inputs | split("\t") | {(.[1]): .[0]}] | reverse | add')
+    want_json=$(printf '%s\n' "$@" | jq -Rn '[inputs | select(length > 0)]')
+    gh project item-list "$proj_number" --owner "$OWNER" --format json --limit 1000 \
+      | jq -r --arg f "$field_name" --argjson k "$keys_json" --argjson w "$want_json" '
+        .items[] | select(.content.number)
+        | ($k[(.[$f | ascii_downcase] // .status // "")] // "?") as $key
+        | select(($w | length) == 0 or ($w | index($key)))
+        | [ "#\(.content.number)", $key,
+            ([(.labels // [])[] | select(. == "feat" or . == "fix" or . == "chore" or . == "refactor")][0] // ""),
+            (.priority // ""), (.score // "" | tostring), (."blast radius" // ""),
+            (.content.title // .title) ] | @tsv'
     ;;
   bootstrap) bootstrap ;;
   *) die "unknown verb '$cmd' — run with no arguments for the verbs" ;;

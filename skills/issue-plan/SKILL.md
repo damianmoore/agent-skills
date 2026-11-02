@@ -30,6 +30,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh conventions.lint_command ""     
 ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh agents.implement_model sonnet    # implement agents' default model
 ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh plans.examples ""               # reference plans, if any
 ${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh deploy.skill ""                 # release skill, if any
+${CLAUDE_PLUGIN_ROOT}/scripts/project-config.sh scoring.skill ""                # ticket-scoring skill, if any
 ```
 
 The trailing argument is the default: an empty result means the project defines no such
@@ -275,6 +276,12 @@ Milestones are the part an agent works through, so they carry the most weight.
   pre-flight checks against prod, release via the project's configured `deploy.skill` skill
   when one exists (otherwise name the release steps explicitly), flag flips with what to
   verify at each state, and the docs/todo cleanup.
+- **A Critical or Wide blast radius makes the rollout say how to back out.** When the
+  ticket's Blast radius is Critical or Wide (`tracker.sh score <id>` when `scoring.skill` is
+  set), or the plan changes money, data migrations, auth or shared core paths, the rollout
+  milestone also names how to undo the change (revert, flag off, data restore, and whether a
+  migration can be reversed) and what to watch in the first hour after release. A change
+  that reaches money or data is the one where a missing undo step costs most.
 - **The rollout milestone always ends with the ticket-closure checkbox** (in `template.md`):
   move the card to **Released** via `issue-update` and archive the plan per
   `issue-implement` §3. When the rollout is a deploy, the release skill does this and the box
@@ -314,6 +321,10 @@ restructure) — where `<kebab-topic>` is usually the plan filename minus `.md` 
 
   Either way, add the `**Ticket:** #NN` link to the plan's `**Status:**` line. The board —
   not any repo file — is the single source of truth for status.
+- **Re-score the ticket** when `scoring.skill` is set, with that skill, once the plan's
+  milestones are written: the milestone count and rollout steps now decide effort, and each
+  open "Decision needed" lowers confidence. A ticket filed just now by `issue-create` was
+  scored from its body alone, so this second pass is the one that counts.
 - **When §7 lists follow-up slices that are tickets in their own right** — a feature the
   interview deliberately cut into a core plus later plans, not a stray idea — lay the group
   out for the user before filing anything: each slice as a one-line ticket, with arrows for

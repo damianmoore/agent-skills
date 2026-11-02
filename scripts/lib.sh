@@ -8,6 +8,7 @@
 #   resolve_status <key-or-column>             column name for either form, or die
 #   status_key <column>                        first lifecycle key mapping to a column
 #   print_statuses                             "key<TAB>column" for the whole lifecycle
+#   score_compute <R> <I> <C> <E> <radius> <type>   "<priority>\t<score>\t<Radius>" (see below)
 #   die <message>
 #
 # The lifecycle is fixed; the column each stage lands in is not. `statuses.<key>` in
@@ -94,4 +95,42 @@ distinct_columns() {
     seen+="$col"$'\n'
     printf '%s\t%s\n' "$key" "$col"
   done
+}
+
+# ---------- scoring (tracker.sh set-score) ----------
+# The one home of the score arithmetic; the judging rubric (what each tier means) lives in the
+# skill named by scoring.skill. Inputs are tiers, so a scorer picks a meaning, not a number:
+#   reach R 1-5       -> 1 2 4 8 16      (doubling: tier 5 reaches ~16x as many as tier 1)
+#   impact I          -> 3 2 1 0.5 0.25  (Intercom's massive/high/medium/low/minimal)
+#   confidence C      -> 100 80 50       (percent)
+#   effort E 1-5      -> 0.5 1 2 4 8     (doubling)
+#   radius            -> critical | wide | limited | contained
+# score = R*I*(C/100)/E, one decimal. Priority: P1 at score >= 10, P2 at >= 2, else P3. On a
+# `fix` ticket the radius sets a floor, because live harm outranks the arithmetic: critical
+# -> P0, wide -> at least P1. On any other type the radius is change risk and leaves the
+# priority alone.
+SCORE_P1=10
+SCORE_P2=2
+SCORE_RADII=(Critical Wide Limited Contained)
+
+score_compute() {
+  local r=$1 i=$2 c=$3 e=$4 radius=${5,,} type=$6 rv ev score p
+  case "$r" in 1) rv=1 ;; 2) rv=2 ;; 3) rv=4 ;; 4) rv=8 ;; 5) rv=16 ;;
+    *) die "reach must be a tier 1-5, got '$r'" ;; esac
+  case "$i" in 3|2|1|0.5|0.25) ;; *) die "impact must be 3, 2, 1, 0.5 or 0.25, got '$i'" ;; esac
+  case "$c" in 100|80|50) ;; *) die "confidence must be 100, 80 or 50, got '$c'" ;; esac
+  case "$e" in 1) ev=0.5 ;; 2) ev=1 ;; 3) ev=2 ;; 4) ev=4 ;; 5) ev=8 ;;
+    *) die "effort must be a tier 1-5, got '$e'" ;; esac
+  case "$radius" in critical|wide|limited|contained) ;;
+    *) die "radius must be critical, wide, limited or contained, got '$5'" ;; esac
+  score=$(awk -v r="$rv" -v i="$i" -v c="$c" -v e="$ev" 'BEGIN { printf "%.1f", r * i * c / 100 / e }')
+  p=$(awk -v s="$score" -v p1="$SCORE_P1" -v p2="$SCORE_P2" \
+    'BEGIN { print (s >= p1 ? "P1" : (s >= p2 ? "P2" : "P3")) }')
+  if [ "$type" = fix ]; then
+    case "$radius" in
+      critical) p=P0 ;;
+      wide) [ "$p" = P0 ] || p=P1 ;;
+    esac
+  fi
+  printf '%s\t%s\t%s\n' "$p" "$score" "${radius^}"
 }
