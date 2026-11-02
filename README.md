@@ -82,7 +82,7 @@ rest (`scripts/lib.sh`, `score_compute`):
 | Effort E | tier 1–5 | 0.5, 1, 2, 4, 8 |
 | Radius | critical, wide, limited, contained | stored as the option |
 
-Score = R × I × C/100 ÷ E, to one decimal. Priority is P1 at a score of 10 or more, P2 at 2
+Score = R × I × C/100 ÷ E, to one decimal. Priority is P1 at a score of 6 or more, P2 at 1.5
 or more, otherwise P3. On a `fix` ticket the radius sets a floor, since it describes harm
 happening now: Critical gives P0, and Wide at least P1. On other types the radius describes
 change risk and leaves the priority alone. A ticket whose Score basis starts with `Pinned`

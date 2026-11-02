@@ -105,12 +105,12 @@ distinct_columns() {
 #   confidence C      -> 100 80 50       (percent)
 #   effort E 1-5      -> 0.5 1 2 4 8     (doubling)
 #   radius            -> critical | wide | limited | contained
-# score = R*I*(C/100)/E, one decimal. Priority: P1 at score >= 10, P2 at >= 2, else P3. On a
+# score = R*I*(C/100)/E, one decimal. Priority: P1 at score >= 6, P2 at >= 1.5, else P3. On a
 # `fix` ticket the radius sets a floor, because live harm outranks the arithmetic: critical
 # -> P0, wide -> at least P1. On any other type the radius is change risk and leaves the
 # priority alone.
-SCORE_P1=10
-SCORE_P2=2
+SCORE_P1=6
+SCORE_P2=1.5
 SCORE_RADII=(Critical Wide Limited Contained)
 
 score_compute() {
