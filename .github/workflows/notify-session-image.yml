@@ -7,13 +7,13 @@ name: Notify session-image
 #
 # Required secret: REPO_DISPATCH_TOKEN
 #   A PAT (classic `repo`, or fine-grained with **Contents: read & write** on
-#   damianmoore/code-server) — the `repository_dispatch` API requires write
+#   damianmoore/epix-agents) — the `repository_dispatch` API requires write
 #   access to the *target* repo, and the default GITHUB_TOKEN is scoped to this
 #   repo only, so it cannot be used. Add it at:
 #   Settings → Secrets and variables → Actions → New repository secret.
 #
 # The receiving side is .github/workflows/session-image.yml in
-# damianmoore/code-server, listening for `repository_dispatch` type
+# damianmoore/epix-agents, listening for `repository_dispatch` type
 # `plugin-updated`.
 
 on:
@@ -49,7 +49,7 @@ jobs:
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.REPO_DISPATCH_TOKEN }}
-          repository: damianmoore/code-server
+          repository: damianmoore/epix-agents
           event-type: plugin-updated
           client-payload: |
             {
